@@ -6,6 +6,7 @@ import { debugRouter } from './routes/debug.routes.js';
 import { themesRouter } from './routes/themes.routes.js';
 import { importRouter } from './routes/import.routes.js';
 import { gamesRouter } from './routes/games.routes.js';
+import { questionsRouter } from './routes/questions.routes.js';
 
 const app = express();
 
@@ -14,6 +15,7 @@ app.use(express.json());
 app.use('/api/themes', themesRouter);
 app.use('/api/import', importRouter);
 app.use('/api/games', gamesRouter);
+app.use('/api/themes', questionsRouter);
 
 app.get('/api/health', (_req, res) => {
     res.json({
@@ -29,6 +31,7 @@ if (env.nodeEnv !== 'production') {
     app.use('/api/debug', debugRouter);
     app.use('/api/import', importRouter);
     app.use('/api/games', gamesRouter);
+    app.use('/api/themes', questionsRouter);
 }
 
 // Middleware centralizado de errores (al final, siempre)

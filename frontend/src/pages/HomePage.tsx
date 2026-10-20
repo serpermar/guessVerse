@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, type Theme } from '../services/api';
-import { readPersisted } from '../stores/game.store';
+import { readPersisted, useGameStore } from '../stores/game.store';
 
 export function HomePage() {
     const [themes, setThemes] = useState<Theme[]>([]);
@@ -9,11 +9,21 @@ export function HomePage() {
     const [error, setError] = useState<string | null>(null);
     const [saved, setSaved] = useState<ReturnType<typeof readPersisted>>(null);
     const nav = useNavigate();
+    const reset = useGameStore((s) => s.reset);
 
     useEffect(() => {
         setSaved(readPersisted());
-        api.themes().then(setThemes).catch((e) => setError(e.message)).finally(() => setLoading(false));
+        api
+            .themes()
+            .then(setThemes)
+            .catch((e) => setError(e.message))
+            .finally(() => setLoading(false));
     }, []);
+
+    const startNewGame = (slug: string) => {
+        reset();                    // ← limpia partida anterior (Marvel, etc.)
+        nav(`/game/${slug}`);
+    };
 
     return (
         <div className="min-h-screen bg-slate-950 text-white p-8">
@@ -36,7 +46,10 @@ export function HomePage() {
                             Continuar
                         </button>
                         <button
-                            onClick={() => { localStorage.removeItem('guessverse:current-game'); setSaved(null); }}
+                            onClick={() => {
+                                localStorage.removeItem('guessverse:current-game');
+                                setSaved(null);
+                            }}
                             className="bg-slate-700 hover:bg-slate-600 px-4 py-2 rounded-lg text-sm"
                         >
                             Descartar
@@ -52,7 +65,7 @@ export function HomePage() {
                 {themes.map((t) => (
                     <button
                         key={t.id}
-                        onClick={() => nav(`/game/${t.slug}`)}
+                        onClick={() => startNewGame(t.slug)}
                         className="p-6 bg-slate-800 rounded-xl hover:bg-slate-700 transition text-left"
                     >
                         <div className="text-2xl font-bold">{t.name}</div>
