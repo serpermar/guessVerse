@@ -4,6 +4,7 @@ import { seedMarvelAttributes } from '../services/attribute-seed.service.js';
 import { importStarWarsCharacters } from '../services/import-starwars.service.js';
 import { seedStarWarsAttributes } from '../services/attribute-seed-starwars.service.js';
 import { importPokemon } from '../services/import-pokemon.service.js';
+import { importMarvelImages } from '../services/import-marvel-images.service.js';
 
 export const importRouter = Router();
 
@@ -36,4 +37,13 @@ importRouter.post('/attributes-starwars', async (_req, res, next) => {
 importRouter.post('/pokemon', async (_req, res, next) => {
     try { res.json({ ok: true, result: await importPokemon() }); }
     catch (err) { next(err); }
+});
+
+importRouter.post('/marvel-images', async (_req, res, next) => {
+    try {
+        const result = await importMarvelImages();
+        res.json({ ok: true, result });
+    } catch (err) {
+        next(err);
+    }
 });
