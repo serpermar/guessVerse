@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '../db/supabase.js';
 import { HttpError } from '../utils/http-error.js';
+import { recordGameResult } from './stats.service.js';
 import {
     evaluate,
     clampBoardSize,
@@ -26,7 +27,22 @@ interface CharacterCard {
 
 export type { Answer };
 
-export async function createGame(themeSlug: string, boardSize = BOARD_SIZE_DEFAULT) {
+// ---------- Helpers ----------
+async function countQuestions(gameId: string): Promise<number> {
+    const { count } = await supabaseAdmin
+        .from('game_questions')
+        .select('*', { count: 'exact', head: true })
+        .eq('game_id', gameId);
+    return count ?? 0;
+}
+
+function secondsSince(iso: string | null): number {
+    if (!iso) return 0;
+    return Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
+}
+
+// ---------- createGame ----------
+export async function createGame(themeSlug: string, boardSize: number, userId: string) {
     const { data: theme, error: themeErr } = await supabaseAdmin
         .from('themes')
         .select('id, name, slug, image_url')
@@ -35,7 +51,6 @@ export async function createGame(themeSlug: string, boardSize = BOARD_SIZE_DEFAU
         .single();
     if (themeErr || !theme) throw HttpError.notFound(`Theme "${themeSlug}" no encontrado`);
 
-    // Traer todos los personajes del theme a través de sus franchises
     const { data: franchises } = await supabaseAdmin
         .from('franchises')
         .select('id')
@@ -60,6 +75,7 @@ export async function createGame(themeSlug: string, boardSize = BOARD_SIZE_DEFAU
         .from('games')
         .insert({
             theme_id: theme.id,
+            created_by: userId,
             mode: 'classic',
             status: 'playing',
             secret_character_id: secret.id,
@@ -69,11 +85,21 @@ export async function createGame(themeSlug: string, boardSize = BOARD_SIZE_DEFAU
         .single();
     if (gameErr || !game) throw new Error(`Error creando partida: ${gameErr?.message}`);
 
+    // Registrar al usuario como host en la partida.
+    const { error: playerErr } = await supabaseAdmin.from('game_players').insert({
+        game_id: game.id,
+        user_id: userId,
+        role: 'host',
+    });
+    if (playerErr) {
+        await supabaseAdmin.from('games').delete().eq('id', game.id);
+        throw new Error(`Error registrando jugador: ${playerErr.message}`);
+    }
+
     const { error: boardErr } = await supabaseAdmin.from('game_characters').insert(
         board.map((c) => ({ game_id: game.id, character_id: c.id }))
     );
     if (boardErr) {
-        // Revertir la partida huérfana para no dejar tableros vacíos.
         await supabaseAdmin.from('games').delete().eq('id', game.id);
         throw new Error(`Error creando el tablero: ${boardErr.message}`);
     }
@@ -86,13 +112,15 @@ export async function createGame(themeSlug: string, boardSize = BOARD_SIZE_DEFAU
     };
 }
 
-export async function askQuestion(gameId: string, questionCode: string) {
+// ---------- askQuestion ----------
+export async function askQuestion(gameId: string, questionCode: string, userId: string) {
     const { data: game, error: gameErr } = await supabaseAdmin
         .from('games')
-        .select('id, status, secret_character_id, theme_id, themes(question_categories)')
+        .select('id, status, secret_character_id, theme_id, created_by, themes(question_categories)')
         .eq('id', gameId)
         .single();
     if (gameErr || !game) throw HttpError.notFound('Partida no encontrada');
+    if (game.created_by !== userId) throw HttpError.forbidden('No eres el dueño de esta partida');
     if (game.status !== 'playing') throw HttpError.conflict(`La partida ya terminó (${game.status})`);
 
     const themeRaw = game.themes as unknown;
@@ -109,11 +137,8 @@ export async function askQuestion(gameId: string, questionCode: string) {
         .single();
     if (qErr || !question) throw HttpError.notFound(`Pregunta "${questionCode}" no existe`);
 
-    // La pregunta debe pertenecer a una categoría habilitada para el theme.
     if (!question.category || !allowedCategories.includes(question.category)) {
-        throw HttpError.badRequest(
-            `La pregunta "${questionCode}" no aplica a esta temática`
-        );
+        throw HttpError.badRequest(`La pregunta "${questionCode}" no aplica a esta temática`);
     }
 
     const { data: secretChar } = await supabaseAdmin
@@ -165,16 +190,17 @@ export async function askQuestion(gameId: string, questionCode: string) {
     };
 }
 
-export async function guessCharacter(gameId: string, characterId: string) {
+// ---------- guessCharacter ----------
+export async function guessCharacter(gameId: string, characterId: string, userId: string) {
     const { data: game, error: gameErr } = await supabaseAdmin
         .from('games')
-        .select('id, status, secret_character_id')
+        .select('id, status, secret_character_id, created_by, started_at')
         .eq('id', gameId)
         .single();
     if (gameErr || !game) throw HttpError.notFound('Partida no encontrada');
+    if (game.created_by !== userId) throw HttpError.forbidden('No eres el dueño de esta partida');
     if (game.status !== 'playing') throw HttpError.conflict(`La partida ya terminó (${game.status})`);
 
-    // El personaje debe estar en el tablero de esta partida.
     const { data: onBoard } = await supabaseAdmin
         .from('game_characters')
         .select('character_id')
@@ -187,6 +213,7 @@ export async function guessCharacter(gameId: string, characterId: string) {
 
     const { error: guessErr } = await supabaseAdmin.from('guesses').insert({
         game_id: gameId,
+        user_id: userId,
         character_id: characterId,
         is_correct: isCorrect,
     });
@@ -195,9 +222,13 @@ export async function guessCharacter(gameId: string, characterId: string) {
     if (isCorrect) {
         const { error: updErr } = await supabaseAdmin
             .from('games')
-            .update({ status: 'won', finished_at: new Date().toISOString() })
+            .update({ status: 'won', winner_user_id: userId, finished_at: new Date().toISOString() })
             .eq('id', gameId);
         if (updErr) throw new Error(`Error finalizando partida: ${updErr.message}`);
+
+        const questions = await countQuestions(gameId);
+        const duration = secondsSince(game.started_at);
+        await recordGameResult(userId, 'won', questions, duration);
 
         const { data: secret } = await supabaseAdmin
             .from('characters')
@@ -210,30 +241,41 @@ export async function guessCharacter(gameId: string, characterId: string) {
     return { correct: false, status: 'playing' as const };
 }
 
-export async function abandonGame(gameId: string) {
+// ---------- abandonGame ----------
+export async function abandonGame(gameId: string, userId: string) {
     const { data: game, error: gameErr } = await supabaseAdmin
         .from('games')
-        .select('id, status')
+        .select('id, status, created_by, started_at')
         .eq('id', gameId)
         .single();
     if (gameErr || !game) throw HttpError.notFound('Partida no encontrada');
+    if (game.created_by !== userId) throw HttpError.forbidden('No eres el dueño de esta partida');
+
     if (game.status === 'playing') {
         const { error } = await supabaseAdmin
             .from('games')
             .update({ status: 'lost', finished_at: new Date().toISOString() })
             .eq('id', gameId);
         if (error) throw new Error(`Error abandonando partida: ${error.message}`);
+
+        const questions = await countQuestions(gameId);
+        const duration = secondsSince(game.started_at);
+        await recordGameResult(userId, 'abandoned', questions, duration);
     }
     return { status: 'lost' as const };
 }
 
-export async function getGame(gameId: string) {
+// ---------- getGame ----------
+export async function getGame(gameId: string, userId: string) {
     const { data: game, error: gameErr } = await supabaseAdmin
         .from('games')
-        .select('id, status, theme_id, started_at, finished_at, secret_character_id, themes(id, name, slug, image_url)')
+        .select(
+            'id, status, theme_id, created_by, started_at, finished_at, secret_character_id, themes(id, name, slug, image_url)'
+        )
         .eq('id', gameId)
         .single();
     if (gameErr || !game) throw HttpError.notFound('Partida no encontrada');
+    if (game.created_by !== userId) throw HttpError.forbidden('No eres el dueño de esta partida');
 
     const { data: board } = await supabaseAdmin
         .from('game_characters')

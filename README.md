@@ -4,10 +4,11 @@ Juego web de deducción inspirado en **¿Quién es quién?**, en el que puedes d
 
 ## Tecnologías
 
-- **Frontend:** React 19, TypeScript, Vite, Tailwind CSS y Zustand.
+- **Frontend:** React 19, TypeScript, Vite, Tailwind CSS, Zustand y Supabase JS.
 - **Backend:** Node.js, Express 5 y TypeScript.
 - **Base de datos:** PostgreSQL mediante Supabase.
-- **Fuentes de datos:** TMDB (Marvel MCU, Star Wars Skywalker Saga), PokeAPI (Pokémon) y akabab (imágenes de Star Wars).
+- **Autenticación:** Supabase Auth (email + password + verificación).
+- **Fuentes de datos:** TMDB (Marvel MCU, Star Wars Skywalker Saga), PokeAPI (Pokémon), SuperHero API (imágenes Marvel) y akabab (imágenes Star Wars).
 
 > Socket.IO y la integración con IGDB están planificados pero **aún no implementados**.
 
@@ -18,7 +19,7 @@ Antes de instalar el proyecto, asegúrate de tener:
 - [Git](https://git-scm.com/downloads).
 - [Node.js](https://nodejs.org/) — preferiblemente una versión LTS compatible con las dependencias.
 - npm, incluido con Node.js.
-- Un proyecto en [Supabase](https://supabase.com/).
+- Un proyecto en [Supabase](https://supabase.com/) con Auth y las tablas del esquema.
 - Credenciales de API de [TMDB](https://www.themoviedb.org/settings/api).
 
 **No necesitas Docker** para ejecutar el proyecto localmente.
@@ -27,47 +28,34 @@ Antes de instalar el proyecto, asegúrate de tener:
 
 ### 1. Clonar el repositorio
 
-Abre PowerShell, una terminal o la terminal integrada de Visual Studio Code y ejecuta:
-
 ```bash
 git clone https://github.com/serpermar/guessVerse.git
 cd guessVerse
-```
-
-Para abrir el proyecto en Visual Studio Code:
-
-```bash
 code .
 ```
 
-### 2. Instalar las dependencias del backend
-
-Desde la raíz del repositorio:
+### 2. Instalar dependencias del backend
 
 ```bash
 cd backend
 npm install
 ```
 
-### 3. Configurar las variables de entorno del backend
+### 3. Variables de entorno del backend
 
-Crea un archivo llamado `.env` dentro de `backend/`, al mismo nivel que su `package.json`.
-
-Usa esta plantilla como referencia y sustituye los valores de ejemplo por tus propias credenciales:
+Crea `backend/.env` al mismo nivel que su `package.json`:
 
 ```dotenv
 # ============================================
 # TMDB
-# Obtener en: https://www.themoviedb.org/settings/api
 # ============================================
 TMDB_ACCESS_TOKEN=tu_tmdb_access_token
 
 # ============================================
 # Supabase
-# Obtener en: Settings → API del proyecto
 # ============================================
 SUPABASE_URL=https://tu-proyecto.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=tu_supabase_secret_o_service_role_key
+SUPABASE_SERVICE_ROLE_KEY=tu_supabase_service_role_key
 
 # ============================================
 # Backend
@@ -81,197 +69,182 @@ NODE_ENV=development
 
 #### ¿Para qué sirve cada variable?
 
-- `TMDB_ACCESS_TOKEN`: permite acceder a la API de TMDB.
+- `TMDB_ACCESS_TOKEN`: acceso a la API de TMDB (importaciones).
 - `SUPABASE_URL`: URL del proyecto de Supabase.
-- `SUPABASE_SERVICE_ROLE_KEY`: clave privilegiada para operaciones de servidor. **Nunca debe utilizarse en el frontend ni exponerse al navegador.**
-- `PORT`: puerto en el que escucha el backend.
+- `SUPABASE_SERVICE_ROLE_KEY`: clave privilegiada del backend. **Nunca debe usarse en el frontend.**
+- `PORT`: puerto del backend.
 - `NODE_ENV`: entorno de ejecución.
-- `CORS_ORIGINS`: lista de dominios permitidos. **Obligatoria cuando `NODE_ENV=production`.**
+- `CORS_ORIGINS`: dominios permitidos. **Obligatoria cuando `NODE_ENV=production`.**
 
-> **Seguridad:** no guardes credenciales reales en este README ni las subas al repositorio. El archivo `backend/.env` debe estar excluido de Git mediante `.gitignore`. Comprueba también que no haya secretos incluidos en otros archivos versionados.
+> **Seguridad:** no guardes credenciales reales en este README ni las subas al repositorio. `backend/.env` debe estar en `.gitignore`.
 
-Si una variable no se utiliza en el código actual, no es necesario inventar un valor para ella; comprueba las referencias en el proyecto. Las variables deben llamarse exactamente como espera el código.
+### 4. Instalar dependencias del frontend
 
-### 4. Instalar las dependencias del frontend
-
-Abre una segunda terminal desde la raíz del proyecto y ejecuta:
+En otra terminal, desde la raíz:
 
 ```bash
 cd frontend
 npm install
 ```
 
-### 5. Configurar las variables de entorno del frontend
+### 5. Variables de entorno del frontend
 
-Crea un archivo llamado `.env` dentro de `frontend/`, al mismo nivel que su `package.json`:
+Crea `frontend/.env` al mismo nivel que su `package.json`:
 
 ```dotenv
 VITE_API_URL=http://localhost:3000
+VITE_SUPABASE_URL=https://tu-proyecto.supabase.co
+VITE_SUPABASE_ANON_KEY=tu_supabase_anon_o_publishable_key
 ```
 
-`VITE_API_URL` debe apuntar a la dirección donde se ejecuta el backend.
+**Importante:** las variables que empiezan por `VITE_` se incluyen en el bundle del navegador. La `VITE_SUPABASE_ANON_KEY` es pública por diseño (solo permite Auth). **Nunca** pongas aquí `SUPABASE_SERVICE_ROLE_KEY` ni `TMDB_ACCESS_TOKEN`.
 
-**Importante:** las variables que empiezan por `VITE_` se incluyen en el código accesible desde el navegador. Nunca pongas `SUPABASE_SERVICE_ROLE_KEY` ni tokens privados en el `.env` del frontend.
-
-Si cambias las variables de entorno, reinicia el servidor de desarrollo de Vite para que cargue los nuevos valores.
+Si cambias variables de entorno, **reinicia Vite** para que las recoja.
 
 ### 6. Iniciar el backend
 
-Desde `backend/`, ejecuta:
-
 ```bash
+cd backend
 npm run dev
 ```
 
-Con la configuración predeterminada, el backend utiliza el puerto `3000`. Puedes verificar que responde con:
+Verifica:
 
 ```bash
 curl http://localhost:3000/api/health
 ```
 
-Mantén esta terminal abierta mientras utilizas la aplicación.
-
 ### 7. Iniciar el frontend
 
-En la segunda terminal, desde `frontend/`, ejecuta:
+En otra terminal:
 
 ```bash
+cd frontend
 npm run dev
 ```
 
-Vite mostrará la dirección local de la aplicación, normalmente:
+Vite mostrará `http://localhost:5173`. Ábrelo en el navegador.
 
-```text
-http://localhost:5173
-```
+## Configuración de Supabase Auth (necesaria para registro)
 
-Abre en el navegador la dirección que aparezca en la terminal.
+En el panel de Supabase:
 
-Si la aplicación depende de Supabase, TMDB o IGDB, comprueba que las credenciales estén configuradas y que el proyecto de Supabase tenga las tablas, políticas y datos requeridos.
+1. **Authentication → Providers → Email** → activa **Confirm email**.
+2. **Authentication → URL Configuration**:
+   - **Site URL**: `http://localhost:5173`
+   - **Redirect URLs**: `http://localhost:5173/auth/callback` y `http://localhost:5173/**`
+3. **Authentication → Email Templates → Confirm sign up** → usa un enlace como:
+   ```html
+   <a href="{{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&type=signup&next={{ .RedirectTo }}">
+     Confirmar mi cuenta
+   </a>
+   ```
+
+Ver `docs/auth.md` para el flujo completo.
 
 ## Uso habitual
 
-Cada vez que quieras ejecutar el proyecto en desarrollo:
-
 1. Abre la carpeta `guessVerse`.
-2. Inicia el backend en una terminal: `cd backend` y `npm run dev`.
-3. Asegúrate de haber creado `frontend/.env` y de que `VITE_API_URL` apunta al backend correcto.
-4. Inicia el frontend en otra terminal: `cd frontend` y `npm run dev`.
-5. Abre la URL que indique Vite.
+2. Terminal 1: `cd backend` → `npm run dev`.
+3. Terminal 2: `cd frontend` → `npm run dev`.
+4. Abre la URL que indique Vite.
+5. Regístrate → confirma el email → juega.
 
-No necesitas ejecutar `npm install` cada vez. Solo tendrás que repetirlo si cambian las dependencias o si necesitas reconstruir la instalación local.
+No hace falta `npm install` cada vez.
 
 ## Actualizar una copia existente
-
-Si ya clonaste el repositorio y quieres descargar los últimos cambios publicados:
 
 ```bash
 git pull origin main
 ```
 
-Si se han modificado las dependencias, actualízalas en cada proyecto:
-
-```bash
-cd backend
-npm install
-```
-
-Y, desde otra terminal:
-
-```bash
-cd frontend
-npm install
-```
-
-Revisa los cambios en los archivos de configuración y en las variables de entorno antes de reiniciar los servicios. `git pull` no descarga los archivos `.env` locales que no están versionados, por lo que tendrás que configurarlos en cada ordenador.
-
-Si Git indica que hay cambios locales que entrarían en conflicto, guarda o confirma esos cambios antes de actualizar.
+Si cambian dependencias, repite `npm install` en `backend/` y `frontend/`. `git pull` **no** descarga `.env` locales.
 
 ## Acceder desde otro dispositivo de la misma red
 
-Si quieres abrir GuessVerse desde otro dispositivo conectado a la misma red local, recuerda que `localhost` se refiere al propio dispositivo que abre el navegador.
-
-Para permitir el acceso en la red local:
-
-1. Averigua la IP local del ordenador donde se ejecutan los servicios.
-2. Configura Vite para escuchar en la red, por ejemplo:
-
-   ```bash
-   npm run dev -- --host 0.0.0.0
-   ```
-
-3. Configura la URL de la API para que apunte a la IP del ordenador servidor, no a `localhost`.
-4. Revisa la configuración de CORS del backend.
-5. Permite únicamente los puertos necesarios en el firewall para tu red de confianza.
-
-El frontend puede necesitar una configuración adicional para usar una URL de backend accesible desde el otro dispositivo. Comprueba cómo se construye esa URL en el código antes de cambiarla.
+1. Averigua la IP local del ordenador servidor.
+2. Vite: `npm run dev -- --host 0.0.0.0`
+3. Configura `VITE_API_URL` con la IP del servidor (no `localhost`).
+4. Revisa CORS del backend (`CORS_ORIGINS`).
+5. Abre solo los puertos necesarios en el firewall.
 
 No expongas el backend directamente a Internet ni publiques credenciales.
 
-## Desplegarlo para acceder desde otra ubicación
+## Desplegar en producción
 
-Para utilizar GuessVerse desde otra casa o fuera de la red local, tendrás que desplegar el frontend y el backend en servicios accesibles desde Internet, o configurar una solución de acceso remoto segura.
+Frontend y backend deben desplegarse en servicios accesibles por HTTPS (ej. Vercel + Railway/Render). Configura:
 
-Configura las URL de producción, HTTPS, variables de entorno y CORS para los dominios correspondientes. No uses las claves privadas en el frontend. Supabase puede seguir siendo el mismo proyecto si su configuración y políticas permiten el acceso desde el entorno desplegado.
+- `VITE_API_URL` en el frontend apuntando a la URL pública del backend.
+- `CORS_ORIGINS` en el backend con el dominio del frontend.
+- Rota las claves comprometidas antes de exponer el registro.
 
 ## Scripts disponibles
 
-Los comandos dependen de los scripts definidos en cada `package.json`. Como referencia, comprueba los disponibles con:
-
-```bash
-npm run
-```
-
-Ejecuta ese comando desde `backend/` y `frontend/` por separado para ver los scripts reales de cada parte. Los comandos actuales son:
-
 | Comando | Dónde | Uso |
 |---|---|---|
-| `npm install` | ambos | Instala las dependencias. |
+| `npm install` | ambos | Instala dependencias. |
 | `npm run dev` | ambos | Backend (`tsx watch`) / Frontend (Vite). |
 | `npm run build` | ambos | Compila (`tsc` / `tsc -b && vite build`). |
 | `npm run typecheck` | backend | Comprueba tipos sin emitir. |
-| `npm test` | backend | Ejecuta los tests (Vitest). |
+| `npm test` | backend | Ejecuta tests (Vitest). |
 | `npm run lint` | frontend | Ejecuta ESLint. |
 | `npm start` | backend | Ejecuta el build (`node dist/server.js`). |
 
-No ejecutes un script que no aparezca en el `package.json` correspondiente.
+## Endpoints principales
+
+**Públicos:**
+- `GET /api/health`
+- `GET /api/themes`
+- `GET /api/themes/:slug/questions`
+
+**Protegidos (requieren `Authorization: Bearer <jwt>`):**
+- `POST /api/games`
+- `GET /api/games/:id`
+- `POST /api/games/:id/questions`
+- `POST /api/games/:id/guess`
+- `POST /api/games/:id/abandon`
+- `GET /api/users/me`
+- `PATCH /api/users/me`
+- `GET /api/users/me/stats`
+- `GET /api/users/me/games`
+
+Ver `docs/PROJECT_STATE.md` para el detalle completo.
 
 ## Solución de problemas
 
 ### El backend no arranca
+- Verifica `npm install` en `backend/`.
+- Revisa `backend/.env` (variables correctas).
+- Comprueba que el puerto está libre.
 
-- Comprueba que has ejecutado `npm install` en `backend/`.
-- Verifica que `backend/.env` existe y contiene las variables que requiere el código.
-- Comprueba que el puerto configurado está libre.
-- Revisa los mensajes de error de la terminal.
+### El frontend no conecta al backend
+- Backend iniciado.
+- `VITE_API_URL` correcta.
+- Si accedes desde otro dispositivo, revisa IP, firewall y CORS.
 
-### El frontend no se conecta al backend
-
-- Comprueba que el backend está iniciado.
-- Revisa la URL de la API configurada en el frontend.
-- Si accedes desde otro dispositivo, comprueba la IP, el firewall y CORS.
-- No uses `localhost` en la URL del backend cuando el navegador se ejecute en otro dispositivo.
+### No llega el email de confirmación
+- Revisa spam.
+- Comprueba la plantilla "Confirm sign up" en Supabase.
+- Si persiste, configura un SMTP propio (Resend/Brevo) en Supabase.
 
 ### No se cargan datos de Supabase o TMDB
-- Revisa las credenciales y que los nombres de las variables coincidan con los que utiliza el código.
-- Comprueba que Supabase esté disponible y que la base de datos tenga el esquema requerido.
-- Consulta los errores de la terminal del backend.
+- Revisa credenciales y nombres de variables.
+- Comprueba que Supabase tiene el esquema aplicado.
+- Mira los logs del backend.
 
-### El proyecto no funciona después de clonarlo
-
-- Ejecuta `npm install` tanto en `backend/` como en `frontend/`.
-- Crea `backend/.env` con las credenciales necesarias y `frontend/.env` con las variables `VITE_*`.
-- Comprueba la configuración de Supabase y de las API externas.
-- Ejecuta `npm run` en cada carpeta para revisar los scripts disponibles.
+### Tras clonar, el proyecto no funciona
+- `npm install` en `backend/` y `frontend/`.
+- Crea ambos `.env` con las variables correctas.
+- Verifica el esquema y políticas en Supabase.
 
 ## Seguridad
 
-- No subas archivos `.env` con credenciales reales a GitHub.
-- Mantén `SUPABASE_SERVICE_ROLE_KEY` y `IGDB_CLIENT_SECRET` exclusivamente en el servidor.
-- No incluyas secretos en el código del frontend.
-- Usa variables distintas para desarrollo y producción cuando sea necesario.
-- Revisa los permisos y las políticas de acceso de Supabase antes de desplegar.
-- Si una clave se publica accidentalmente, revócala o rótala desde el proveedor correspondiente.
+- No subas `.env` con credenciales reales.
+- `SUPABASE_SERVICE_ROLE_KEY` y `TMDB_ACCESS_TOKEN`: **solo backend**.
+- No incluyas secretos en el bundle del frontend.
+- Usa variables distintas para desarrollo y producción.
+- Revisa RLS y políticas en Supabase antes de desplegar.
+- Si una clave se publica accidentalmente, **rótala** en el proveedor.
 
 ## Repositorio
 

@@ -10,6 +10,7 @@ import { importRouter } from './routes/import.routes.js';
 import { gamesRouter } from './routes/games.routes.js';
 import { questionsRouter } from './routes/questions.routes.js';
 import { errorHandler, notFoundHandler } from './middleware/error.middleware.js';
+import { usersRouter } from './routes/users.routes.js';
 
 const app = express();
 
@@ -38,6 +39,7 @@ app.use(
 app.use('/api/themes', themesRouter);
 app.use('/api/themes', questionsRouter);
 app.use('/api/games', gamesRouter);
+app.use('/api/users', usersRouter);
 
 app.get('/api/health', (_req, res) => {
     res.json({

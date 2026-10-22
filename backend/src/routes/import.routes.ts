@@ -10,6 +10,10 @@ import { importMovieTheme, MOVIE_CATALOGS } from '../services/import-movies.serv
 import { seedThemes } from '../services/seed-themes.service.js';
 import { asyncHandler } from '../utils/async-handler.js';
 import { HttpError } from '../utils/http-error.js';
+import { importHarryPotter } from '../services/import-harrypotter.service.js';
+import { seedHarryPotterAttributes } from '../services/attribute-seed-harrypotter.service.js';
+import { importDC } from '../services/import-dc.service.js';
+import { seedDCAttributes } from '../services/attribute-seed-dc.service.js';
 
 export const importRouter = Router();
 
@@ -75,4 +79,24 @@ importRouter.get('/movies', (_req, res) => {
             movies: c.movies.length,
         })),
     });
+});
+
+importRouter.post('/harrypotter', async (_req, res, next) => {
+    try { res.json({ ok: true, result: await importHarryPotter() }); }
+    catch (err) { next(err); }
+});
+
+importRouter.post('/attributes-harrypotter', async (_req, res, next) => {
+    try { res.json({ ok: true, result: await seedHarryPotterAttributes() }); }
+    catch (err) { next(err); }
+});
+
+importRouter.post('/dc', async (_req, res, next) => {
+    try { res.json({ ok: true, result: await importDC() }); }
+    catch (err) { next(err); }
+});
+
+importRouter.post('/attributes-dc', async (_req, res, next) => {
+    try { res.json({ ok: true, result: await seedDCAttributes() }); }
+    catch (err) { next(err); }
 });
