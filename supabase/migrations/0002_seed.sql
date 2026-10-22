@@ -50,5 +50,42 @@ values
     ('pokemon_poison',   '¿Es de tipo veneno?',    'species',        'eq', '{"v":"poison"}'::jsonb, 'pokemon'),
     ('pokemon_flying',   '¿Es de tipo volador?',   'species',        'eq', '{"v":"flying"}'::jsonb, 'pokemon'),
     ('pokemon_normal',   '¿Es de tipo normal?',    'species',        'eq', '{"v":"normal"}'::jsonb, 'pokemon'),
-    ('pokemon_bug',      '¿Es de tipo bicho?',     'species',        'eq', '{"v":"bug"}'::jsonb,    'pokemon')
-on conflict (code) do nothing;
+    ('pokemon_bug',      '¿Es de tipo bicho?',     'species',        'eq', '{"v":"bug"}'::jsonb,    'pokemon'),
+    ('hp_gryffindor',    '¿Es de Gryffindor?',     'house',          'eq', '{"v":"Gryffindor"}'::jsonb, 'hogwarts'),
+    ('hp_slytherin',     '¿Es de Slytherin?',      'house',          'eq', '{"v":"Slytherin"}'::jsonb,  'hogwarts'),
+    ('hp_ravenclaw',     '¿Es de Ravenclaw?',      'house',          'eq', '{"v":"Ravenclaw"}'::jsonb,  'hogwarts'),
+    ('hp_hufflepuff',    '¿Es de Hufflepuff?',     'house',          'eq', '{"v":"Hufflepuff"}'::jsonb, 'hogwarts')
+on conflict (code) do update set
+    text_es = excluded.text_es,
+    attribute = excluded.attribute,
+    operator = excluded.operator,
+    value = excluded.value,
+    category = excluded.category,
+    is_active = true;
+
+-- ----------------------------------------------------------------------------
+-- Temáticas adicionales (DC Comics)
+-- ----------------------------------------------------------------------------
+insert into public.themes (slug, name, description, type, source, question_categories)
+values
+    ('dc-comics', 'DC Comics', 'Héroes y villanos del universo DC', 'superheroes', 'manual', '{identity,role,abilities}')
+on conflict (slug) do update set
+    name = excluded.name,
+    description = excluded.description,
+    type = excluded.type,
+    question_categories = excluded.question_categories,
+    is_active = true;
+
+-- ----------------------------------------------------------------------------
+-- Franquicias adicionales
+-- ----------------------------------------------------------------------------
+insert into public.franchises (theme_id, slug, name, description, source)
+select t.id, v.slug, v.name, v.description, 'manual'
+from (values
+    ('dc-comics', 'dceu', 'DC Extended Universe', 'Películas del DCEU'),
+    ('dc-comics', 'dc-universe', 'DC Universe', 'Personajes del universo DC Comics')
+) as v(theme_slug, slug, name, description)
+join public.themes t on t.slug = v.theme_slug
+on conflict (theme_id, slug) do update set
+    name = excluded.name,
+    description = excluded.description;

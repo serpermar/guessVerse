@@ -25,11 +25,11 @@ export function LoginPage() {
     }
 
     return (
-        <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center p-4">
-            <form onSubmit={onSubmit} className="bg-slate-800 p-6 rounded-xl w-full max-w-sm space-y-3">
+        <div className="flex min-h-[calc(100vh-64px)] items-center justify-center bg-canvas px-4 text-fg">
+            <form onSubmit={onSubmit} className="w-full max-w-sm space-y-3 rounded-xl border border-border bg-surface p-6 shadow-lg">
                 <h1 className="text-2xl font-bold">Entrar</h1>
                 <input
-                    className="w-full p-2 rounded bg-slate-700"
+                    className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-fg placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-brand/60"
                     type="email"
                     placeholder="email"
                     value={email}
@@ -38,7 +38,7 @@ export function LoginPage() {
                     autoComplete="email"
                 />
                 <input
-                    className="w-full p-2 rounded bg-slate-700"
+                    className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-fg placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-brand/60"
                     type="password"
                     placeholder="contraseña"
                     value={password}
@@ -46,16 +46,16 @@ export function LoginPage() {
                     required
                     autoComplete="current-password"
                 />
-                {err && <p className="text-red-400 text-sm">{err}</p>}
+                {err && <p className="text-sm text-red-500">{err}</p>}
                 <button
                     disabled={loading}
-                    className="w-full bg-purple-500 hover:bg-purple-600 disabled:opacity-50 p-2 rounded font-semibold"
+                    className="w-full rounded-lg bg-brand-strong px-3 py-2 font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
                 >
-                    {loading ? 'Entrando…' : 'Entrar'}
+                    {loading ? 'Entrando...' : 'Entrar'}
                 </button>
-                <p className="text-sm text-slate-400">
+                <p className="text-sm text-muted">
                     ¿No tienes cuenta?{' '}
-                    <Link to="/register" className="text-purple-400">Regístrate</Link>
+                    <Link to="/register" className="text-brand hover:opacity-90">Regístrate</Link>
                 </p>
             </form>
         </div>

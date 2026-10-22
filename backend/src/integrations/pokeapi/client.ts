@@ -1,3 +1,5 @@
+import { fetchJson } from '../../utils/fetch.js';
+
 const POKEAPI_BASE = 'https://pokeapi.co/api/v2';
 
 export interface PokeApiPokemon {
@@ -12,7 +14,7 @@ export interface PokeApiPokemon {
 }
 
 export async function fetchPokemon(idOrName: number | string): Promise<PokeApiPokemon> {
-    const res = await fetch(`${POKEAPI_BASE}/pokemon/${idOrName}`);
-    if (!res.ok) throw new Error(`PokeAPI ${res.status} para ${idOrName}`);
-    return (await res.json()) as PokeApiPokemon;
+    return fetchJson<PokeApiPokemon>(`${POKEAPI_BASE}/pokemon/${idOrName}`, {}, {
+        label: `PokeAPI ${idOrName}`,
+    });
 }

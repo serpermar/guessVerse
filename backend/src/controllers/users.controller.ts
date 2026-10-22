@@ -15,7 +15,11 @@ export async function getMe(req: Request, res: Response, next: NextFunction) {
 
 const patchSchema = z.object({
     username: z.string().min(3).max(20).regex(/^[a-z0-9_]+$/).optional(),
-    avatar_url: z.string().url().optional(),
+    avatar_url: z
+        .string()
+        .url()
+        .refine((value) => value.startsWith('https://'), 'avatar_url debe usar HTTPS')
+        .optional(),
 });
 
 export async function patchMe(req: Request, res: Response, next: NextFunction) {
@@ -35,10 +39,13 @@ export async function getMyStats(req: Request, res: Response, next: NextFunction
 
 export async function getMyGames(req: Request, res: Response, next: NextFunction) {
     try {
-        const limit = Math.min(Number(req.query.limit) || 20, 50);
+        const rawLimit = Number(req.query.limit);
+        const limit = Number.isFinite(rawLimit)
+            ? Math.min(Math.max(Math.trunc(rawLimit), 1), 50)
+            : 20;
         const { data, error } = await supabaseAdmin
             .from('games')
-            .select('id, status, mode, started_at, finished_at, secret_character_id, themes(name, slug)')
+            .select('id, status, mode, started_at, finished_at, themes(name, slug)')
             .eq('created_by', req.user!.id)
             .order('started_at', { ascending: false })
             .limit(limit);

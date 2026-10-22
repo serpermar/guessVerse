@@ -1,3 +1,5 @@
+import { fetchJson } from '../../utils/fetch.js';
+
 const AKABAB_ALL = 'https://akabab.github.io/superhero-api/api/all.json';
 
 export interface AkababHero {
@@ -19,7 +21,5 @@ export interface AkababHero {
 }
 
 export async function fetchAllAkababHeroes(): Promise<AkababHero[]> {
-    const res = await fetch(AKABAB_ALL);
-    if (!res.ok) throw new Error(`akabab ${res.status}`);
-    return (await res.json()) as AkababHero[];
+    return fetchJson<AkababHero[]>(AKABAB_ALL, {}, { label: 'akabab' });
 }

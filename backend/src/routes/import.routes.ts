@@ -14,8 +14,11 @@ import { importHarryPotter } from '../services/import-harrypotter.service.js';
 import { seedHarryPotterAttributes } from '../services/attribute-seed-harrypotter.service.js';
 import { importDC } from '../services/import-dc.service.js';
 import { seedDCAttributes } from '../services/attribute-seed-dc.service.js';
+import { requireImportToken } from '../middleware/import-auth.middleware.js';
 
 export const importRouter = Router();
+
+importRouter.use(requireImportToken);
 
 // Temáticas existentes
 importRouter.post('/marvel', asyncHandler(async (_req, res) => {

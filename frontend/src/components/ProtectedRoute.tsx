@@ -7,8 +7,8 @@ export function ProtectedRoute() {
     // Mientras carga la sesión, mostramos un spinner o pantalla en blanco
     if (loading) {
         return (
-            <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center">
-                Cargando sesión…
+            <div className="flex min-h-[40vh] items-center justify-center bg-canvas text-muted">
+                Cargando sesión...
             </div>
         );
     }

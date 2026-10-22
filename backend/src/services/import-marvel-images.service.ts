@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '../db/supabase.js';
 import { normalizeName } from '../utils/text.js';
+import { fetchJson } from '../utils/fetch.js';
 
 const SUPERHERO_API_ALL = 'https://akabab.github.io/superhero-api/api/all.json';
 
@@ -51,9 +52,9 @@ export interface ImportImagesResult {
 
 export async function importMarvelImages(): Promise<ImportImagesResult> {
     console.log('⏳ Descargando SuperHero API...');
-    const res = await fetch(SUPERHERO_API_ALL);
-    if (!res.ok) throw new Error(`SuperHero API respondió ${res.status}`);
-    const all = (await res.json()) as AkababCharacter[];
+    const all = await fetchJson<AkababCharacter[]>(SUPERHERO_API_ALL, {}, {
+        label: 'SuperHero API',
+    });
     console.log(`✅ ${all.length} personajes descargados`);
 
     // Índice: nombre + fullName + aliases

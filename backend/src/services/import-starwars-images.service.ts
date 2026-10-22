@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '../db/supabase.js';
 import { normalizeName } from '../utils/text.js';
+import { fetchJson } from '../utils/fetch.js';
 
 const AKABAB_SW_ALL = 'https://akabab.github.io/starwars-api/api/all.json';
 
@@ -78,9 +79,9 @@ export interface ImportStarWarsImagesResult {
 
 export async function importStarWarsImages(): Promise<ImportStarWarsImagesResult> {
     console.log('⏳ Descargando akabab Star Wars API...');
-    const res = await fetch(AKABAB_SW_ALL);
-    if (!res.ok) throw new Error(`akabab SW API respondió ${res.status}`);
-    const all = (await res.json()) as AkababSwCharacter[];
+    const all = await fetchJson<AkababSwCharacter[]>(AKABAB_SW_ALL, {}, {
+        label: 'akabab SW API',
+    });
     console.log(`✅ ${all.length} personajes descargados`);
 
     const index = new Map<string, AkababSwCharacter>();

@@ -1,4 +1,5 @@
 import { env } from '../../config/env.js';
+import { fetchJson } from '../../utils/fetch.js';
 
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
 const TMDB_IMAGE_BASE_URL = 'https://image.tmdb.org/t/p';
@@ -21,19 +22,16 @@ export async function tmdbFetch<T>(
         }
     }
 
-    const res = await fetch(url.toString(), {
-        headers: {
-            Authorization: `Bearer ${env.tmdb.accessToken}`,
-            accept: 'application/json',
+    return fetchJson<T>(
+        url.toString(),
+        {
+            headers: {
+                Authorization: `Bearer ${env.tmdb.accessToken}`,
+                accept: 'application/json',
+            },
         },
-    });
-
-    if (!res.ok) {
-        const body = await res.text();
-        throw new Error(`TMDB ${res.status} en ${path}: ${body.slice(0, 200)}`);
-    }
-
-    return (await res.json()) as T;
+        { label: `TMDB ${path}` }
+    );
 }
 
 export function tmdbImageUrl(

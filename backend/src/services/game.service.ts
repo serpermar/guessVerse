@@ -241,8 +241,9 @@ export async function guessCharacter(gameId: string, characterId: string, userId
     return { correct: false, status: 'playing' as const };
 }
 
-// ---------- abandonGame ----------
-export async function abandonGame(gameId: string, userId: string) {
+// ---------- loseGame ----------
+/** Cierra la partida como derrota (p. ej. el jugador descartó todas las cartas). */
+export async function loseGame(gameId: string, userId: string) {
     const { data: game, error: gameErr } = await supabaseAdmin
         .from('games')
         .select('id, status, created_by, started_at')
@@ -256,13 +257,37 @@ export async function abandonGame(gameId: string, userId: string) {
             .from('games')
             .update({ status: 'lost', finished_at: new Date().toISOString() })
             .eq('id', gameId);
+        if (error) throw new Error(`Error cerrando partida: ${error.message}`);
+
+        const questions = await countQuestions(gameId);
+        const duration = secondsSince(game.started_at);
+        await recordGameResult(userId, 'lost', questions, duration);
+    }
+    return { status: 'lost' as const };
+}
+
+// ---------- abandonGame ----------
+export async function abandonGame(gameId: string, userId: string) {
+    const { data: game, error: gameErr } = await supabaseAdmin
+        .from('games')
+        .select('id, status, created_by, started_at')
+        .eq('id', gameId)
+        .single();
+    if (gameErr || !game) throw HttpError.notFound('Partida no encontrada');
+    if (game.created_by !== userId) throw HttpError.forbidden('No eres el dueño de esta partida');
+
+    if (game.status === 'playing') {
+        const { error } = await supabaseAdmin
+            .from('games')
+            .update({ status: 'abandoned', finished_at: new Date().toISOString() })
+            .eq('id', gameId);
         if (error) throw new Error(`Error abandonando partida: ${error.message}`);
 
         const questions = await countQuestions(gameId);
         const duration = secondsSince(game.started_at);
         await recordGameResult(userId, 'abandoned', questions, duration);
     }
-    return { status: 'lost' as const };
+    return { status: 'abandoned' as const };
 }
 
 // ---------- getGame ----------
@@ -270,7 +295,7 @@ export async function getGame(gameId: string, userId: string) {
     const { data: game, error: gameErr } = await supabaseAdmin
         .from('games')
         .select(
-            'id, status, theme_id, created_by, started_at, finished_at, secret_character_id, themes(id, name, slug, image_url)'
+            'id, status, theme_id, created_by, started_at, finished_at, themes(id, name, slug, image_url)'
         )
         .eq('id', gameId)
         .single();

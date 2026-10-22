@@ -1,3 +1,5 @@
+import { fetchJson } from '../../utils/fetch.js';
+
 const HPAPI_BASE = 'https://hp-api.onrender.com/api';
 
 export interface HpCharacter {
@@ -16,7 +18,8 @@ export interface HpCharacter {
 }
 
 export async function fetchAllHpCharacters(): Promise<HpCharacter[]> {
-    const res = await fetch(`${HPAPI_BASE}/characters`);
-    if (!res.ok) throw new Error(`HP-API ${res.status}`);
-    return (await res.json()) as HpCharacter[];
+    return fetchJson<HpCharacter[]>(`${HPAPI_BASE}/characters`, {}, {
+        label: 'HP-API',
+        timeoutMs: 20_000,
+    });
 }

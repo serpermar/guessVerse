@@ -32,6 +32,8 @@ export const env = {
     isProduction: nodeEnv === 'production',
     port: Number(process.env.PORT) || 3000,
     corsOrigins: corsOrigins(nodeEnv),
+    /** Si se define, /api/import exige la cabecera X-Import-Token. */
+    importToken: process.env.IMPORT_TOKEN?.trim() || null,
     tmdb: {
         accessToken: required('TMDB_ACCESS_TOKEN'),
     },

@@ -4,13 +4,13 @@ Juego web de deducción inspirado en **¿Quién es quién?**, en el que puedes d
 
 ## Tecnologías
 
-- **Frontend:** React 19, TypeScript, Vite, Tailwind CSS, Zustand y Supabase JS.
+- **Frontend:** React 19, TypeScript, Vite, Tailwind CSS v4, Zustand y Supabase JS.
 - **Backend:** Node.js, Express 5 y TypeScript.
 - **Base de datos:** PostgreSQL mediante Supabase.
 - **Autenticación:** Supabase Auth (email + password + verificación).
-- **Fuentes de datos:** TMDB (Marvel MCU, Star Wars Skywalker Saga), PokeAPI (Pokémon), SuperHero API (imágenes Marvel) y akabab (imágenes Star Wars).
+- **Fuentes de datos:** TMDB (Marvel MCU, Star Wars Skywalker Saga), PokeAPI (Pokémon), SuperHero API/akabab (Marvel/DC/Star Wars), HP-API (Harry Potter).
 
-> Socket.IO y la integración con IGDB están planificados pero **aún no implementados**.
+> Socket.IO está planificado pero **aún no implementado**.
 
 ## Requisitos previos
 
@@ -175,7 +175,9 @@ No expongas el backend directamente a Internet ni publiques credenciales.
 Frontend y backend deben desplegarse en servicios accesibles por HTTPS (ej. Vercel + Railway/Render). Configura:
 
 - `VITE_API_URL` en el frontend apuntando a la URL pública del backend.
+- `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY` en el frontend.
 - `CORS_ORIGINS` en el backend con el dominio del frontend.
+- `IMPORT_TOKEN` opcional para proteger `/api/import` si se habilita fuera de desarrollo.
 - Rota las claves comprometidas antes de exponer el registro.
 
 ## Scripts disponibles
