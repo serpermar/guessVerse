@@ -3,6 +3,30 @@ import { useNavigate } from 'react-router-dom';
 import { api, type Theme } from '../services/api';
 import { readPersisted, useGameStore } from '../stores/game.store';
 
+const THEME_EMOJI: Record<string, string> = {
+    marvel: '🦸',
+    'star-wars': '🌌',
+    'harry-potter': '⚡',
+    'resident-evil': '🧟',
+    pokemon: '⚡',
+};
+
+const THEME_GRADIENT: Record<string, string> = {
+    marvel: 'from-red-500/80 to-yellow-500/80',
+    'star-wars': 'from-slate-700/80 to-amber-500/80',
+    'harry-potter': 'from-amber-700/80 to-yellow-600/80',
+    'resident-evil': 'from-emerald-700/80 to-red-700/80',
+    pokemon: 'from-yellow-400/80 to-red-500/80',
+};
+
+function themeEmoji(slug: string) {
+    return THEME_EMOJI[slug] ?? '🎮';
+}
+
+function themeGradient(slug: string) {
+    return THEME_GRADIENT[slug] ?? 'from-brand/80 to-accent/80';
+}
+
 export function HomePage() {
     const [themes, setThemes] = useState<Theme[]>([]);
     const [loading, setLoading] = useState(true);
@@ -17,7 +41,7 @@ export function HomePage() {
         api
             .themes()
             .then(setThemes)
-            .catch((e) => setError(e.message))
+            .catch((e) => setError((e as Error).message))
             .finally(() => setLoading(false));
     };
 
@@ -33,7 +57,7 @@ export function HomePage() {
             })
             .catch((e) => {
                 if (!cancelled) {
-                    setError(e.message);
+                    setError((e as Error).message);
                     setLoading(false);
                 }
             });
@@ -48,22 +72,24 @@ export function HomePage() {
     };
 
     return (
-        <div className="min-h-screen bg-slate-950 text-white p-8">
-            <h1 className="text-5xl font-black text-center mb-2 bg-gradient-to-r from-purple-400 to-pink-500 bg-clip-text text-transparent">
+        <main className="mx-auto max-w-5xl px-4 py-10 animate-fade-in">
+            <h1 className="text-center text-5xl font-black tracking-tight bg-gradient-to-r from-brand to-accent bg-clip-text text-transparent">
                 GuessVerse
             </h1>
-            <p className="text-center text-slate-400 mb-8">Adivina el personaje secreto</p>
+            <p className="mt-2 text-center text-muted">Adivina el personaje secreto</p>
 
             {saved && (
-                <div className="max-w-4xl mx-auto mb-8 p-4 bg-purple-900/40 border border-purple-500/40 rounded-xl flex items-center justify-between">
+                <div className="mx-auto mb-8 mt-8 flex max-w-3xl items-center justify-between gap-4 rounded-2xl border border-brand/40 bg-brand/10 p-4 animate-pop-in">
                     <div>
-                        <div className="text-sm text-purple-300">Partida en curso</div>
-                        <div className="font-bold">{saved.theme.name}</div>
+                        <div className="text-xs font-semibold uppercase tracking-wide text-brand">
+                            Partida en curso
+                        </div>
+                        <div className="text-lg font-bold">{saved.theme.name}</div>
                     </div>
                     <div className="flex gap-2">
                         <button
                             onClick={() => nav(`/game/${saved.theme.slug}`)}
-                            className="bg-purple-500 hover:bg-purple-600 px-4 py-2 rounded-lg font-semibold text-sm"
+                            className="rounded-lg bg-brand-strong px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90"
                         >
                             Continuar
                         </button>
@@ -72,7 +98,7 @@ export function HomePage() {
                                 localStorage.removeItem('guessverse:current-game');
                                 setSaved(null);
                             }}
-                            className="bg-slate-700 hover:bg-slate-600 px-4 py-2 rounded-lg text-sm"
+                            className="rounded-lg border border-border bg-surface-2 px-4 py-2 text-sm text-muted transition hover:text-fg"
                         >
                             Descartar
                         </button>
@@ -80,13 +106,14 @@ export function HomePage() {
                 </div>
             )}
 
-            {loading && <p className="text-center">Cargando temáticas…</p>}
+            {loading && <p className="mt-10 text-center text-muted">Cargando temáticas…</p>}
+
             {error && (
-                <div className="text-center text-red-400">
+                <div className="mt-10 text-center text-red-500">
                     <p className="mb-2">No se pudieron cargar las temáticas.</p>
                     <button
                         onClick={loadThemes}
-                        className="bg-slate-700 hover:bg-slate-600 px-4 py-2 rounded-lg text-sm text-white"
+                        className="rounded-lg border border-border bg-surface-2 px-4 py-2 text-sm text-fg transition hover:bg-surface"
                     >
                         Reintentar
                     </button>
@@ -94,32 +121,43 @@ export function HomePage() {
             )}
 
             {!loading && !error && themes.length === 0 && (
-                <p className="text-center text-slate-400">
+                <p className="mt-10 text-center text-muted">
                     No hay temáticas disponibles todavía.
                 </p>
             )}
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 max-w-4xl mx-auto">
-                {themes.map((t) => (
+            <div className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {themes.map((t, i) => (
                     <button
                         key={t.id}
                         onClick={() => startNewGame(t.slug)}
-                        className="p-6 bg-slate-800 rounded-xl hover:bg-slate-700 transition text-left flex flex-col gap-3"
+                        style={{ animationDelay: `${i * 40}ms` }}
+                        className="group flex animate-pop-in flex-col gap-3 overflow-hidden rounded-2xl border border-border bg-surface p-4 text-left transition hover:-translate-y-1 hover:border-brand/60 hover:shadow-lg hover:shadow-brand/10"
                     >
-                        {t.image_url && (
-                            <img
-                                src={t.image_url}
-                                alt=""
-                                className="w-full h-32 object-cover rounded-lg"
-                            />
-                        )}
+                        <div
+                            className={`relative flex h-36 items-center justify-center rounded-xl bg-gradient-to-br ${themeGradient(
+                                t.slug
+                            )}`}
+                        >
+                            {t.image_url ? (
+                                <img
+                                    src={t.image_url}
+                                    alt=""
+                                    className="h-full w-full rounded-xl object-cover"
+                                />
+                            ) : (
+                                <span className="text-6xl drop-shadow-lg transition-transform group-hover:scale-110">
+                                    {themeEmoji(t.slug)}
+                                </span>
+                            )}
+                        </div>
                         <div>
-                            <div className="text-2xl font-bold">{t.name}</div>
-                            <div className="text-slate-400 text-sm mt-1">{t.description}</div>
+                            <div className="text-xl font-bold">{t.name}</div>
+                            <div className="mt-1 text-sm text-muted">{t.description}</div>
                         </div>
                     </button>
                 ))}
             </div>
-        </div>
+        </main>
     );
 }

@@ -1,1 +1,72 @@
 @import "tailwindcss";
+
+/* ==========================================================================
+   GuessVerse — Tema claro/oscuro con tokens de diseño (Tailwind v4)
+   --------------------------------------------------------------------------
+   Los colores semánticos se definen como variables CSS y se exponen a
+   Tailwind vía `@theme inline`, de modo que clases como `bg-surface` o
+   `text-muted` cambian automáticamente según el modo (`.dark` en <html>).
+   ========================================================================== */
+
+:root {
+  --color-canvas: #f8fafc;
+  --color-surface: #ffffff;
+  --color-surface-2: #f1f5f9;
+  --color-border: #e2e8f0;
+  --color-fg: #0f172a;
+  --color-muted: #64748b;
+  --color-brand: #7c3aed;
+  --color-brand-strong: #6d28d9;
+  --color-accent: #db2777;
+}
+
+.dark {
+  --color-canvas: #020617;
+  --color-surface: #0f172a;
+  --color-surface-2: #1e293b;
+  --color-border: #1e293b;
+  --color-fg: #f8fafc;
+  --color-muted: #94a3b8;
+  --color-brand: #a78bfa;
+  --color-brand-strong: #8b5cf6;
+  --color-accent: #f472b6;
+}
+
+@theme inline {
+  --color-canvas: var(--color-canvas);
+  --color-surface: var(--color-surface);
+  --color-surface-2: var(--color-surface-2);
+  --color-border: var(--color-border);
+  --color-fg: var(--color-fg);
+  --color-muted: var(--color-muted);
+  --color-brand: var(--color-brand);
+  --color-brand-strong: var(--color-brand-strong);
+  --color-accent: var(--color-accent);
+
+  --animate-fade-in: fade-in 0.25s ease-out both;
+  --animate-pop-in: pop-in 0.2s ease-out both;
+  --animate-flip: flip 0.35s ease-out both;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes pop-in {
+  from { opacity: 0; transform: scale(0.94); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes flip {
+  from { opacity: 0; transform: rotateY(90deg); }
+  to { opacity: 1; transform: rotateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -64,7 +64,7 @@ export function Modal({ title, onClose, children, hideClose, zIndex = 'z-30' }: 
                 role="dialog"
                 aria-modal="true"
                 aria-label={title}
-                className="bg-slate-800 rounded-2xl p-6 max-w-sm w-full text-center"
+                className="w-full max-w-sm animate-pop-in rounded-2xl border border-border bg-surface p-6 text-center text-fg"
                 onClick={(e) => e.stopPropagation()}
             >
                 {!hideClose && (
@@ -72,7 +72,7 @@ export function Modal({ title, onClose, children, hideClose, zIndex = 'z-30' }: 
                         type="button"
                         aria-label="Cerrar"
                         onClick={onClose}
-                        className="float-right text-slate-400 hover:text-white -mt-1 -mr-1 px-2"
+                        className="-mr-1 -mt-1 float-right px-2 text-muted hover:text-fg"
                     >
                         ✕
                     </button>

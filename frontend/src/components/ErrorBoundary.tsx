@@ -23,7 +23,7 @@ export class ErrorBoundary extends Component<Props, State> {
     render() {
         if (this.state.hasError) {
             return (
-                <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center gap-4 p-8 text-center">
+                <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-canvas p-8 text-center text-fg">
                     <div className="text-6xl">😵</div>
                     <h1 className="text-2xl font-bold">Algo salió mal</h1>
                     <button
@@ -31,7 +31,7 @@ export class ErrorBoundary extends Component<Props, State> {
                             localStorage.removeItem('guessverse:current-game');
                             window.location.href = '/';
                         }}
-                        className="bg-purple-500 hover:bg-purple-600 px-6 py-2 rounded-lg font-semibold"
+                        className="rounded-lg bg-brand-strong px-6 py-2 font-semibold text-white transition hover:opacity-90"
                     >
                         Volver al inicio
                     </button>

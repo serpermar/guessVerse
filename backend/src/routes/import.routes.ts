@@ -6,54 +6,73 @@ import { seedStarWarsAttributes } from '../services/attribute-seed-starwars.serv
 import { importPokemon } from '../services/import-pokemon.service.js';
 import { importMarvelImages } from '../services/import-marvel-images.service.js';
 import { importStarWarsImages } from '../services/import-starwars-images.service.js';
+import { importMovieTheme, MOVIE_CATALOGS } from '../services/import-movies.service.js';
+import { seedThemes } from '../services/seed-themes.service.js';
+import { asyncHandler } from '../utils/async-handler.js';
+import { HttpError } from '../utils/http-error.js';
 
 export const importRouter = Router();
 
-importRouter.post('/marvel', async (_req, res, next) => {
-    try {
-        const result = await importMarvelCharacters();
-        res.json({ ok: true, result });
-    } catch (err) {
-        next(err);
+// Temáticas existentes
+importRouter.post('/marvel', asyncHandler(async (_req, res) => {
+    const result = await importMarvelCharacters();
+    res.json({ ok: true, result });
+}));
+
+importRouter.post('/attributes-marvel', asyncHandler(async (_req, res) => {
+    const result = await seedMarvelAttributes();
+    res.json({ ok: true, result });
+}));
+
+importRouter.post('/starwars', asyncHandler(async (_req, res) => {
+    const result = await importStarWarsCharacters();
+    res.json({ ok: true, result });
+}));
+
+importRouter.post('/attributes-starwars', asyncHandler(async (_req, res) => {
+    const result = await seedStarWarsAttributes();
+    res.json({ ok: true, result });
+}));
+
+importRouter.post('/pokemon', asyncHandler(async (_req, res) => {
+    const result = await importPokemon();
+    res.json({ ok: true, result });
+}));
+
+importRouter.post('/marvel-images', asyncHandler(async (_req, res) => {
+    const result = await importMarvelImages();
+    res.json({ ok: true, result });
+}));
+
+importRouter.post('/starwars-images', asyncHandler(async (_req, res) => {
+    const result = await importStarWarsImages();
+    res.json({ ok: true, result });
+}));
+
+// Sembrar temáticas y franquicias desde el registro
+importRouter.post('/seed-themes', asyncHandler(async (_req, res) => {
+    const result = await seedThemes();
+    res.json({ ok: true, result });
+}));
+
+// Importador genérico basado en películas TMDB (catálogo verificado)
+importRouter.post('/movies/:themeSlug', asyncHandler(async (req, res) => {
+    const { themeSlug } = req.params;
+    if (!MOVIE_CATALOGS.some((c) => c.themeSlug === themeSlug)) {
+        throw HttpError.badRequest(`Tema "${themeSlug}" no tiene catálogo de películas registrado`);
     }
-});
+    const result = await importMovieTheme(themeSlug);
+    res.json({ ok: true, result });
+}));
 
-importRouter.post('/attributes-marvel', async (_req, res, next) => {
-    try {
-        const result = await seedMarvelAttributes();
-        res.json({ ok: true, result });
-    } catch (err) { next(err); }
-});
-
-importRouter.post('/starwars', async (_req, res, next) => {
-    try { res.json({ ok: true, result: await importStarWarsCharacters() }); }
-    catch (err) { next(err); }
-});
-
-importRouter.post('/attributes-starwars', async (_req, res, next) => {
-    try { res.json({ ok: true, result: await seedStarWarsAttributes() }); }
-    catch (err) { next(err); }
-});
-
-importRouter.post('/pokemon', async (_req, res, next) => {
-    try { res.json({ ok: true, result: await importPokemon() }); }
-    catch (err) { next(err); }
-});
-
-importRouter.post('/marvel-images', async (_req, res, next) => {
-    try {
-        const result = await importMarvelImages();
-        res.json({ ok: true, result });
-    } catch (err) {
-        next(err);
-    }
-});
-
-importRouter.post('/starwars-images', async (_req, res, next) => {
-    try {
-        const result = await importStarWarsImages();
-        res.json({ ok: true, result });
-    } catch (err) {
-        next(err);
-    }
+// Listado de catálogos disponibles (solo dev)
+importRouter.get('/movies', (_req, res) => {
+    res.json({
+        ok: true,
+        data: MOVIE_CATALOGS.map((c) => ({
+            themeSlug: c.themeSlug,
+            franchiseSlug: c.franchiseSlug,
+            movies: c.movies.length,
+        })),
+    });
 });
