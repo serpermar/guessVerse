@@ -1,4 +1,22 @@
 import { supabaseAdmin } from '../db/supabase.js';
+import { HttpError } from '../utils/http-error.js';
+import {
+    evaluate,
+    clampBoardSize,
+    shuffle,
+    BOARD_SIZE_MIN,
+    BOARD_SIZE_MAX,
+    BOARD_SIZE_DEFAULT,
+    type Answer,
+} from './game.rules.js';
+
+export {
+    evaluate,
+    clampBoardSize,
+    BOARD_SIZE_MIN,
+    BOARD_SIZE_MAX,
+    BOARD_SIZE_DEFAULT,
+};
 
 interface CharacterCard {
     id: string;
@@ -6,27 +24,16 @@ interface CharacterCard {
     image_url: string | null;
 }
 
-type Answer = 'yes' | 'no' | 'unknown';
+export type { Answer };
 
-function evaluate(value: unknown, operator: string, expected: unknown): Answer {
-    if (value === null || value === undefined) return 'unknown';
-    switch (operator) {
-        case 'eq': return value === expected ? 'yes' : 'no';
-        case 'ne': return value !== expected ? 'yes' : 'no';
-        case 'in': return Array.isArray(expected) && expected.includes(value) ? 'yes' : 'no';
-        case 'not_in': return Array.isArray(expected) && !expected.includes(value) ? 'yes' : 'no';
-        default: return 'unknown';
-    }
-}
-
-export async function createGame(themeSlug: string, boardSize = 16) {
+export async function createGame(themeSlug: string, boardSize = BOARD_SIZE_DEFAULT) {
     const { data: theme, error: themeErr } = await supabaseAdmin
         .from('themes')
         .select('id, name, slug, image_url')
         .eq('slug', themeSlug)
         .eq('is_active', true)
         .single();
-    if (themeErr || !theme) throw new Error(`Theme "${themeSlug}" no encontrado`);
+    if (themeErr || !theme) throw HttpError.notFound(`Theme "${themeSlug}" no encontrado`);
 
     // Traer todos los personajes del theme a través de sus franchises
     const { data: franchises } = await supabaseAdmin
@@ -34,19 +41,19 @@ export async function createGame(themeSlug: string, boardSize = 16) {
         .select('id')
         .eq('theme_id', theme.id);
     const franchiseIds = (franchises ?? []).map((f) => f.id);
-    if (franchiseIds.length === 0) throw new Error('La temática no tiene personajes todavía');
+    if (franchiseIds.length === 0) throw HttpError.badRequest('La temática no tiene personajes todavía');
 
     const { data: chars, error: charsErr } = await supabaseAdmin
         .from('characters')
         .select('id, name, image_url')
         .in('franchise_id', franchiseIds);
-    if (charsErr || !chars || chars.length < 4) {
-        throw new Error('La temática necesita al menos 4 personajes');
+    if (charsErr) throw new Error(`Error leyendo personajes: ${charsErr.message}`);
+    if (!chars || chars.length < BOARD_SIZE_MIN) {
+        throw HttpError.badRequest(`La temática necesita al menos ${BOARD_SIZE_MIN} personajes`);
     }
 
-    // Shuffle y recorte
-    const shuffled = [...chars].sort(() => Math.random() - 0.5);
-    const board = shuffled.slice(0, Math.min(boardSize, shuffled.length));
+    const size = clampBoardSize(boardSize);
+    const board = shuffle(chars).slice(0, Math.min(size, chars.length));
     const secret = board[Math.floor(Math.random() * board.length)];
 
     const { data: game, error: gameErr } = await supabaseAdmin
@@ -62,10 +69,14 @@ export async function createGame(themeSlug: string, boardSize = 16) {
         .single();
     if (gameErr || !game) throw new Error(`Error creando partida: ${gameErr?.message}`);
 
-    // Insertar tablero
-    await supabaseAdmin.from('game_characters').insert(
+    const { error: boardErr } = await supabaseAdmin.from('game_characters').insert(
         board.map((c) => ({ game_id: game.id, character_id: c.id }))
     );
+    if (boardErr) {
+        // Revertir la partida huérfana para no dejar tableros vacíos.
+        await supabaseAdmin.from('games').delete().eq('id', game.id);
+        throw new Error(`Error creando el tablero: ${boardErr.message}`);
+    }
 
     return {
         gameId: game.id,
@@ -78,19 +89,32 @@ export async function createGame(themeSlug: string, boardSize = 16) {
 export async function askQuestion(gameId: string, questionCode: string) {
     const { data: game, error: gameErr } = await supabaseAdmin
         .from('games')
-        .select('id, status, secret_character_id')
+        .select('id, status, secret_character_id, theme_id, themes(question_categories)')
         .eq('id', gameId)
         .single();
-    if (gameErr || !game) throw new Error('Partida no encontrada');
-    if (game.status !== 'playing') throw new Error(`La partida ya terminó (${game.status})`);
+    if (gameErr || !game) throw HttpError.notFound('Partida no encontrada');
+    if (game.status !== 'playing') throw HttpError.conflict(`La partida ya terminó (${game.status})`);
 
-    const { data: question } = await supabaseAdmin
+    const themeRaw = game.themes as unknown;
+    const theme = (Array.isArray(themeRaw) ? themeRaw[0] : themeRaw) as
+        | { question_categories: string[] | null }
+        | null;
+    const allowedCategories = theme?.question_categories ?? [];
+
+    const { data: question, error: qErr } = await supabaseAdmin
         .from('questions')
         .select('*')
         .eq('code', questionCode)
         .eq('is_active', true)
         .single();
-    if (!question) throw new Error(`Pregunta "${questionCode}" no existe`);
+    if (qErr || !question) throw HttpError.notFound(`Pregunta "${questionCode}" no existe`);
+
+    // La pregunta debe pertenecer a una categoría habilitada para el theme.
+    if (!question.category || !allowedCategories.includes(question.category)) {
+        throw HttpError.badRequest(
+            `La pregunta "${questionCode}" no aplica a esta temática`
+        );
+    }
 
     const { data: secretChar } = await supabaseAdmin
         .from('characters')
@@ -99,11 +123,10 @@ export async function askQuestion(gameId: string, questionCode: string) {
         .single();
     if (!secretChar) throw new Error('Personaje secreto no encontrado');
 
-    const expected = (question.value as { v: unknown }).v;
+    const expected = (question.value as { v: unknown } | null)?.v;
     const secretValue = (secretChar as Record<string, unknown>)[question.attribute];
     const answer = evaluate(secretValue, question.operator, expected);
 
-    // 👇 SELECT ESTÁTICO con todos los atributos posibles
     const { data: boardRows } = await supabaseAdmin
         .from('game_characters')
         .select(
@@ -128,11 +151,12 @@ export async function askQuestion(gameId: string, questionCode: string) {
         else unknown.push(row.character_id);
     }
 
-    await supabaseAdmin.from('game_questions').insert({
+    const { error: logErr } = await supabaseAdmin.from('game_questions').insert({
         game_id: gameId,
         question_id: question.id,
         answer,
     });
+    if (logErr) throw new Error(`Error registrando pregunta: ${logErr.message}`);
 
     return {
         question: { code: question.code, text: question.text_es },
@@ -142,45 +166,74 @@ export async function askQuestion(gameId: string, questionCode: string) {
 }
 
 export async function guessCharacter(gameId: string, characterId: string) {
-    const { data: game } = await supabaseAdmin
+    const { data: game, error: gameErr } = await supabaseAdmin
         .from('games')
         .select('id, status, secret_character_id')
         .eq('id', gameId)
         .single();
-    if (!game) throw new Error('Partida no encontrada');
-    if (game.status !== 'playing') throw new Error(`La partida ya terminó (${game.status})`);
+    if (gameErr || !game) throw HttpError.notFound('Partida no encontrada');
+    if (game.status !== 'playing') throw HttpError.conflict(`La partida ya terminó (${game.status})`);
+
+    // El personaje debe estar en el tablero de esta partida.
+    const { data: onBoard } = await supabaseAdmin
+        .from('game_characters')
+        .select('character_id')
+        .eq('game_id', gameId)
+        .eq('character_id', characterId)
+        .maybeSingle();
+    if (!onBoard) throw HttpError.badRequest('Ese personaje no está en el tablero de esta partida');
 
     const isCorrect = game.secret_character_id === characterId;
 
-    await supabaseAdmin.from('guesses').insert({
+    const { error: guessErr } = await supabaseAdmin.from('guesses').insert({
         game_id: gameId,
         character_id: characterId,
         is_correct: isCorrect,
     });
+    if (guessErr) throw new Error(`Error registrando intento: ${guessErr.message}`);
 
     if (isCorrect) {
-        await supabaseAdmin
+        const { error: updErr } = await supabaseAdmin
             .from('games')
             .update({ status: 'won', finished_at: new Date().toISOString() })
             .eq('id', gameId);
+        if (updErr) throw new Error(`Error finalizando partida: ${updErr.message}`);
+
         const { data: secret } = await supabaseAdmin
             .from('characters')
             .select('id, name, image_url')
             .eq('id', game.secret_character_id)
             .single();
-        return { correct: true, status: 'won', secret };
+        return { correct: true, status: 'won' as const, secret };
     }
 
-    return { correct: false, status: 'playing' };
+    return { correct: false, status: 'playing' as const };
+}
+
+export async function abandonGame(gameId: string) {
+    const { data: game, error: gameErr } = await supabaseAdmin
+        .from('games')
+        .select('id, status')
+        .eq('id', gameId)
+        .single();
+    if (gameErr || !game) throw HttpError.notFound('Partida no encontrada');
+    if (game.status === 'playing') {
+        const { error } = await supabaseAdmin
+            .from('games')
+            .update({ status: 'lost', finished_at: new Date().toISOString() })
+            .eq('id', gameId);
+        if (error) throw new Error(`Error abandonando partida: ${error.message}`);
+    }
+    return { status: 'lost' as const };
 }
 
 export async function getGame(gameId: string) {
-    const { data: game } = await supabaseAdmin
+    const { data: game, error: gameErr } = await supabaseAdmin
         .from('games')
         .select('id, status, theme_id, started_at, finished_at, secret_character_id, themes(id, name, slug, image_url)')
         .eq('id', gameId)
         .single();
-    if (!game) throw new Error('Partida no encontrada');
+    if (gameErr || !game) throw HttpError.notFound('Partida no encontrada');
 
     const { data: board } = await supabaseAdmin
         .from('game_characters')

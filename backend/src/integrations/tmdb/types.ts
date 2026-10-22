@@ -6,10 +6,3 @@ export interface TmdbMovie {
     release_date: string;
     genres: { id: number; name: string }[];
 }
-
-export interface TmdbPagedResponse<T> {
-    page: number;
-    results: T[];
-    total_pages: number;
-    total_results: number;
-}

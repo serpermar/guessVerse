@@ -8,9 +8,30 @@ function required(name: string): string {
     return value;
 }
 
+/**
+ * Lista de orígenes permitidos para CORS, separados por coma.
+ * En desarrollo, si no se define, se permite cualquier origen.
+ */
+function corsOrigins(nodeEnv: string): string[] | true {
+    const raw = process.env.CORS_ORIGINS?.trim();
+    if (raw) {
+        return raw.split(',').map((o) => o.trim()).filter(Boolean);
+    }
+    if (nodeEnv === 'production') {
+        throw new Error(
+            '❌ Falta CORS_ORIGINS en producción (lista de dominios separados por coma).'
+        );
+    }
+    return true;
+}
+
+const nodeEnv = process.env.NODE_ENV ?? 'development';
+
 export const env = {
-    nodeEnv: process.env.NODE_ENV ?? 'development',
+    nodeEnv,
+    isProduction: nodeEnv === 'production',
     port: Number(process.env.PORT) || 3000,
+    corsOrigins: corsOrigins(nodeEnv),
     tmdb: {
         accessToken: required('TMDB_ACCESS_TOKEN'),
     },

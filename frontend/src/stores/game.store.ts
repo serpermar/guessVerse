@@ -20,8 +20,9 @@ interface GameState {
     toggleEliminate: (id: string) => void;
     askQuestion: (code: string, text: string) => Promise<void>;
     makeGuess: (id: string) => Promise<void>;
-    abandon: () => void;
-    hydrate: () => boolean;
+    abandon: () => Promise<void>;
+    hydrate: (themeSlug?: string) => boolean;
+    clearError: () => void;
     reset: () => void;
 }
 
@@ -73,9 +74,11 @@ export const useGameStore = create<GameState>((set, get) => ({
     error: null,
     logs: [],
 
-    hydrate: () => {
+    hydrate: (themeSlug) => {
         const p = readPersisted();
         if (!p) return false;
+        // Solo reanudar si la partida guardada es de la temática pedida.
+        if (themeSlug && p.theme.slug !== themeSlug) return false;
         set({
             gameId: p.gameId,
             theme: p.theme,
@@ -142,8 +145,8 @@ export const useGameStore = create<GameState>((set, get) => ({
             const logs = [...get().logs, { question: text, answer: logAnswer }];
             const isDead = elim.size >= get().board.length;
             const nextStatus: Status = isDead ? 'lost' : 'playing';
-            const next = { ...get(), eliminated: elim, logs, status: nextStatus };
-            set({ eliminated: elim, logs, status: nextStatus });
+            const next = { ...get(), eliminated: elim, logs, status: nextStatus, error: null };
+            set({ eliminated: elim, logs, status: nextStatus, error: null });
             persist(next);
         } catch (e) {
             set({ error: (e as Error).message });
@@ -156,16 +159,16 @@ export const useGameStore = create<GameState>((set, get) => ({
         try {
             const res = await api.guess(gameId, characterId);
             if (res.correct) {
-                const next = { ...get(), status: 'won' as Status, secret: res.secret ?? null };
-                set({ status: 'won', secret: res.secret ?? null });
+                const next = { ...get(), status: 'won' as Status, secret: res.secret ?? null, error: null };
+                set({ status: 'won', secret: res.secret ?? null, error: null });
                 persist(next);
             } else {
                 const elim = new Set(get().eliminated);
                 elim.add(characterId);
                 const isDead = elim.size >= get().board.length;
                 const nextStatus: Status = isDead ? 'lost' : 'playing';
-                const next = { ...get(), eliminated: elim, status: nextStatus };
-                set({ eliminated: elim, status: nextStatus });
+                const next = { ...get(), eliminated: elim, status: nextStatus, error: null };
+                set({ eliminated: elim, status: nextStatus, error: null });
                 persist(next);
             }
         } catch (e) {
@@ -173,11 +176,17 @@ export const useGameStore = create<GameState>((set, get) => ({
         }
     },
 
-    abandon: () => {
+    abandon: async () => {
+        const { gameId } = get();
+        if (gameId) {
+            api.abandon(gameId).catch(() => undefined);
+        }
         const next = { ...get(), status: 'lost' as Status };
         set({ status: 'lost' });
         persist(next);
     },
+
+    clearError: () => set({ error: null }),
 
     reset: () => {
         localStorage.removeItem(STORAGE_KEY);

@@ -4,10 +4,12 @@ Juego web de deducción inspirado en **¿Quién es quién?**, en el que puedes d
 
 ## Tecnologías
 
-- **Frontend:** React, TypeScript, Vite, Tailwind CSS y Zustand.
-- **Backend:** Node.js, Express, TypeScript y Socket.IO.
+- **Frontend:** React 19, TypeScript, Vite, Tailwind CSS y Zustand.
+- **Backend:** Node.js, Express 5 y TypeScript.
 - **Base de datos:** PostgreSQL mediante Supabase.
-- **Fuentes de datos:** TMDB para películas y series e IGDB, a través de Twitch, para videojuegos.
+- **Fuentes de datos:** TMDB (Marvel MCU, Star Wars Skywalker Saga), PokeAPI (Pokémon) y akabab (imágenes de Star Wars).
+
+> Socket.IO y la integración con IGDB están planificados pero **aún no implementados**.
 
 ## Requisitos previos
 
@@ -18,7 +20,6 @@ Antes de instalar el proyecto, asegúrate de tener:
 - npm, incluido con Node.js.
 - Un proyecto en [Supabase](https://supabase.com/).
 - Credenciales de API de [TMDB](https://www.themoviedb.org/settings/api).
-- Una aplicación registrada en [Twitch Developer Console](https://dev.twitch.tv/console/apps) para acceder a IGDB.
 
 **No necesitas Docker** para ejecutar el proyecto localmente.
 
@@ -59,22 +60,13 @@ Usa esta plantilla como referencia y sustituye los valores de ejemplo por tus pr
 # TMDB
 # Obtener en: https://www.themoviedb.org/settings/api
 # ============================================
-TMDB_API_KEY=tu_tmdb_api_key
 TMDB_ACCESS_TOKEN=tu_tmdb_access_token
-
-# ============================================
-# IGDB (vía Twitch)
-# Obtener en: https://dev.twitch.tv/console/apps
-# ============================================
-IGDB_CLIENT_ID=tu_igdb_client_id
-IGDB_CLIENT_SECRET=tu_igdb_client_secret
 
 # ============================================
 # Supabase
 # Obtener en: Settings → API del proyecto
 # ============================================
 SUPABASE_URL=https://tu-proyecto.supabase.co
-SUPABASE_ANON_KEY=tu_supabase_publishable_o_anon_key
 SUPABASE_SERVICE_ROLE_KEY=tu_supabase_secret_o_service_role_key
 
 # ============================================
@@ -82,17 +74,19 @@ SUPABASE_SERVICE_ROLE_KEY=tu_supabase_secret_o_service_role_key
 # ============================================
 PORT=3000
 NODE_ENV=development
+
+# CORS: obligatorio en producción (dominios separados por coma).
+# CORS_ORIGINS=https://guessverse.vercel.app,http://localhost:5173
 ```
 
 #### ¿Para qué sirve cada variable?
 
-- `TMDB_API_KEY` y `TMDB_ACCESS_TOKEN`: permiten acceder a la API de TMDB.
-- `IGDB_CLIENT_ID` e `IGDB_CLIENT_SECRET`: identifican la aplicación registrada en Twitch para solicitar acceso a IGDB.
+- `TMDB_ACCESS_TOKEN`: permite acceder a la API de TMDB.
 - `SUPABASE_URL`: URL del proyecto de Supabase.
-- `SUPABASE_ANON_KEY`: clave pública para los usos autorizados por las políticas de acceso de Supabase.
 - `SUPABASE_SERVICE_ROLE_KEY`: clave privilegiada para operaciones de servidor. **Nunca debe utilizarse en el frontend ni exponerse al navegador.**
 - `PORT`: puerto en el que escucha el backend.
 - `NODE_ENV`: entorno de ejecución.
+- `CORS_ORIGINS`: lista de dominios permitidos. **Obligatoria cuando `NODE_ENV=production`.**
 
 > **Seguridad:** no guardes credenciales reales en este README ni las subas al repositorio. El archivo `backend/.env` debe estar excluido de Git mediante `.gitignore`. Comprueba también que no haya secretos incluidos en otros archivos versionados.
 
@@ -112,14 +106,12 @@ npm install
 Crea un archivo llamado `.env` dentro de `frontend/`, al mismo nivel que su `package.json`:
 
 ```dotenv
-VITE_SUPABASE_URL=https://tu-proyecto.supabase.co
-VITE_SUPABASE_ANON_KEY=tu_supabase_publishable_o_anon_key
 VITE_API_URL=http://localhost:3000
 ```
 
-Rellena `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY` con los valores correspondientes de tu proyecto de Supabase. `VITE_API_URL` debe apuntar a la dirección donde se ejecuta el backend.
+`VITE_API_URL` debe apuntar a la dirección donde se ejecuta el backend.
 
-**Importante:** las variables que empiezan por `VITE_` se incluyen en el código accesible desde el navegador. Por eso, solo debes poner ahí valores destinados al cliente, como la clave publicable/anon de Supabase. Nunca pongas `SUPABASE_SERVICE_ROLE_KEY`, `IGDB_CLIENT_SECRET` ni tokens privados en el `.env` del frontend. Protege los datos con las políticas de seguridad (RLS) de Supabase.
+**Importante:** las variables que empiezan por `VITE_` se incluyen en el código accesible desde el navegador. Nunca pongas `SUPABASE_SERVICE_ROLE_KEY` ni tokens privados en el `.env` del frontend.
 
 Si cambias las variables de entorno, reinicia el servidor de desarrollo de Vite para que cargue los nuevos valores.
 
@@ -131,7 +123,11 @@ Desde `backend/`, ejecuta:
 npm run dev
 ```
 
-Con la configuración predeterminada, el backend debería utilizar el puerto `3000`. Si el proyecto define una ruta de comprobación de estado, puedes usarla para verificar que responde; consulta las rutas implementadas en el backend para confirmar la URL exacta.
+Con la configuración predeterminada, el backend utiliza el puerto `3000`. Puedes verificar que responde con:
+
+```bash
+curl http://localhost:3000/api/health
+```
 
 Mantén esta terminal abierta mientras utilizas la aplicación.
 
@@ -226,14 +222,17 @@ Los comandos dependen de los scripts definidos en cada `package.json`. Como refe
 npm run
 ```
 
-Ejecuta ese comando desde `backend/` y `frontend/` por separado para ver los scripts reales de cada parte. Los comandos habituales en este proyecto de desarrollo son:
+Ejecuta ese comando desde `backend/` y `frontend/` por separado para ver los scripts reales de cada parte. Los comandos actuales son:
 
-| Comando | Uso |
-|---|---|
-| `npm install` | Instala las dependencias. |
-| `npm run dev` | Inicia el servidor de desarrollo, si está definido en ese paquete. |
-| `npm run build` | Genera la compilación, si está definido en ese paquete. |
-| `npm run lint` | Ejecuta las comprobaciones de estilo, si está definido en ese paquete. |
+| Comando | Dónde | Uso |
+|---|---|---|
+| `npm install` | ambos | Instala las dependencias. |
+| `npm run dev` | ambos | Backend (`tsx watch`) / Frontend (Vite). |
+| `npm run build` | ambos | Compila (`tsc` / `tsc -b && vite build`). |
+| `npm run typecheck` | backend | Comprueba tipos sin emitir. |
+| `npm test` | backend | Ejecuta los tests (Vitest). |
+| `npm run lint` | frontend | Ejecuta ESLint. |
+| `npm start` | backend | Ejecuta el build (`node dist/server.js`). |
 
 No ejecutes un script que no aparezca en el `package.json` correspondiente.
 
@@ -253,11 +252,9 @@ No ejecutes un script que no aparezca en el `package.json` correspondiente.
 - Si accedes desde otro dispositivo, comprueba la IP, el firewall y CORS.
 - No uses `localhost` en la URL del backend cuando el navegador se ejecute en otro dispositivo.
 
-### No se cargan datos de Supabase, TMDB o IGDB
-
+### No se cargan datos de Supabase o TMDB
 - Revisa las credenciales y que los nombres de las variables coincidan con los que utiliza el código.
 - Comprueba que Supabase esté disponible y que la base de datos tenga el esquema requerido.
-- Verifica que la aplicación de Twitch esté configurada para el acceso a IGDB.
 - Consulta los errores de la terminal del backend.
 
 ### El proyecto no funciona después de clonarlo

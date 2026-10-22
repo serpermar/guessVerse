@@ -1,56 +1,74 @@
-import type { Request, Response, NextFunction } from 'express';
-import { createGame, askQuestion, guessCharacter, getGame } from '../services/game.service.js';
+import { z } from 'zod';
+import type { Request, Response } from 'express';
+import { asyncHandler } from '../utils/async-handler.js';
+import { HttpError } from '../utils/http-error.js';
+import {
+    createGame,
+    askQuestion,
+    guessCharacter,
+    abandonGame,
+    getGame,
+    clampBoardSize,
+} from '../services/game.service.js';
 
-export async function postCreateGame(req: Request, res: Response, next: NextFunction) {
-    try {
-        const { themeSlug, boardSize } = req.body ?? {};
-        if (typeof themeSlug !== 'string') {
-            res.status(400).json({ error: 'themeSlug es obligatorio' });
-            return;
-        }
-        const result = await createGame(themeSlug, Number(boardSize) || 16);
-        res.status(201).json(result);
-    } catch (err) { next(err); }
+const createGameSchema = z.object({
+    themeSlug: z.string().min(1).max(64),
+    boardSize: z.unknown().optional(),
+});
+
+const questionSchema = z.object({
+    questionCode: z.string().min(1).max(64),
+});
+
+const guessSchema = z.object({
+    characterId: z.string().uuid(),
+});
+
+const idParamSchema = z.object({
+    id: z.string().uuid(),
+});
+
+function parse<T>(schema: z.ZodType<T>, value: unknown): T {
+    const result = schema.safeParse(value);
+    if (!result.success) {
+        const issue = result.error.issues[0];
+        throw HttpError.badRequest(issue?.message ?? 'Datos inválidos');
+    }
+    return result.data;
 }
 
-export async function postQuestion(
-    req: Request<{ id: string }>,
-    res: Response,
-    next: NextFunction
-) {
-    try {
-        const { questionCode } = req.body ?? {};
-        if (typeof questionCode !== 'string') {
-            res.status(400).json({ error: 'questionCode es obligatorio' });
-            return;
-        }
-        const result = await askQuestion(req.params.id, questionCode);
-        res.json(result);
-    } catch (err) { next(err); }
-}
+export const postCreateGame = asyncHandler(async (req: Request, res: Response) => {
+    const { themeSlug, boardSize } = parse(createGameSchema, req.body ?? {});
+    const result = await createGame(themeSlug, clampBoardSize(boardSize));
+    res.status(201).json(result);
+});
 
-export async function postGuess(
-    req: Request<{ id: string }>,
-    res: Response,
-    next: NextFunction
-) {
-    try {
-        const { characterId } = req.body ?? {};
-        if (typeof characterId !== 'string') {
-            res.status(400).json({ error: 'characterId es obligatorio' });
-            return;
-        }
-        const result = await guessCharacter(req.params.id, characterId);
-        res.json(result);
-    } catch (err) { next(err); }
-}
+export const postQuestion = asyncHandler(
+    async (req: Request<{ id: string }>, res: Response) => {
+        const { id } = parse(idParamSchema, req.params);
+        const { questionCode } = parse(questionSchema, req.body ?? {});
+        res.json(await askQuestion(id, questionCode));
+    }
+);
 
-export async function getGameById(
-    req: Request<{ id: string }>,
-    res: Response,
-    next: NextFunction
-) {
-    try {
-        res.json(await getGame(req.params.id));
-    } catch (err) { next(err); }
-}
+export const postGuess = asyncHandler(
+    async (req: Request<{ id: string }>, res: Response) => {
+        const { id } = parse(idParamSchema, req.params);
+        const { characterId } = parse(guessSchema, req.body ?? {});
+        res.json(await guessCharacter(id, characterId));
+    }
+);
+
+export const postAbandon = asyncHandler(
+    async (req: Request<{ id: string }>, res: Response) => {
+        const { id } = parse(idParamSchema, req.params);
+        res.json(await abandonGame(id));
+    }
+);
+
+export const getGameById = asyncHandler(
+    async (req: Request<{ id: string }>, res: Response) => {
+        const { id } = parse(idParamSchema, req.params);
+        res.json(await getGame(id));
+    }
+);

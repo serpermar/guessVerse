@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '../db/supabase.js';
+import { normalizeName } from '../utils/text.js';
 
 const SUPERHERO_API_ALL = 'https://akabab.github.io/superhero-api/api/all.json';
 
@@ -12,17 +13,6 @@ interface AkababCharacter {
         fullName?: string;
         aliases?: string[];
     };
-}
-
-/** Normaliza: minúsculas, sin acentos, sin símbolos, espacios colapsados. */
-function normalizeName(raw: string): string {
-    return raw
-        .toLowerCase()
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .replace(/[^a-z0-9 ]/g, '')
-        .replace(/\s+/g, ' ')
-        .trim();
 }
 
 /** Quita títulos/prefijos comunes que TMDB añade a los créditos. */
