@@ -10,6 +10,8 @@ import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
 import { AuthCallbackPage } from './pages/AuthCallbackPage';
 import { ProfilePage } from './pages/ProfilePage';
+import { ThemeDetailPage } from './pages/ThemeDetailPage';
+import { DiscoverPage } from './pages/DiscoverPage';
 
 function App() {
   return (
@@ -29,6 +31,8 @@ function App() {
                 <Route path="/" element={<HomePage />} />
                 <Route path="/game/:themeSlug" element={<GamePage />} />
                 <Route path="/profile" element={<ProfilePage />} />
+                <Route path="/themes/:slug" element={<ThemeDetailPage />} />
+                <Route path="/discover" element={<DiscoverPage />} />
               </Route>
 
               {/* Redirección por defecto */}

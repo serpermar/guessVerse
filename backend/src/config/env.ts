@@ -41,4 +41,7 @@ export const env = {
         url: required('SUPABASE_URL'),
         serviceRoleKey: required('SUPABASE_SERVICE_ROLE_KEY'),
     },
+    fanart: {
+        apiKey: required('FANART_API_KEY'),
+    },
 } as const;

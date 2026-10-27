@@ -90,8 +90,39 @@ export interface GameHistoryItem {
     themes: { name: string; slug: string } | null;
 }
 
+export interface CharacterDetail {
+    id: string;
+    name: string;
+    image_url: string | null;
+    gender: string | null;
+    species: string | null;
+    house: string | null;
+    is_human: boolean | null;
+    is_hero: boolean | null;
+    is_villain: boolean | null;
+    is_protagonist: boolean | null;
+    has_powers: boolean | null;
+    uses_weapon: boolean | null;
+}
+
+export interface ThemeDetail {
+    theme: Theme & { question_categories?: string[] | null };
+    characters: CharacterDetail[];
+    questions: QuestionDto[];
+}
+
+export interface DiscoveredFranchise {
+    source: string;
+    externalId: string;
+    name: string;
+    description: string;
+    imageUrl: string | null;
+}
+
 // ---------- API ----------
 export const api = {
+    themeDetail: (slug: string) =>
+        req<ThemeDetail>(`/api/themes/${slug}`),
     themes: () =>
         req<{ data: Theme[] }>('/api/themes').then((r) => r.data),
 
@@ -132,4 +163,13 @@ export const api = {
 
     myGames: (limit = 20) =>
         req<{ data: GameHistoryItem[] }>(`/api/users/me/games?limit=${limit}`).then((r) => r.data),
+
+    discover: (query: string) =>
+        req<{ data: DiscoveredFranchise[] }>(`/api/discover?q=${encodeURIComponent(query)}`).then(r => r.data),
+
+    importFranchise: (franchise: DiscoveredFranchise) =>
+        req<{ ok: boolean; message: string }>('/api/discover/import', {
+            method: 'POST',
+            body: JSON.stringify(franchise),
+        }),
 };

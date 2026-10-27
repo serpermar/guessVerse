@@ -6,7 +6,6 @@ const server = app.listen(env.port, () => {
     console.log(`🚀 GuessVerse backend en http://localhost:${env.port}`);
 });
 
-// Apagado ordenado
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
     process.on(signal, () => {
         console.log(`\n${signal} recibido, cerrando servidor…`);
