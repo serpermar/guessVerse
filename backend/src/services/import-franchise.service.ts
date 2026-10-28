@@ -1,9 +1,9 @@
 import { DiscoveredFranchise } from './discover.service.js';
 import { tmdbFetch } from '../integrations/tmdb/client.js';
 import { fetchMovieCredits } from '../integrations/tmdb/credits.js';
+import { getWikipediaImage } from '../integrations/wikipedia/client.js'; // <-- NUEVO
 import { supabaseAdmin } from '../db/supabase.js';
 import { slugify } from '../utils/text.js';
-// import { getCharacterArtForMovie } from '../integrations/fanart/client.js'; // Descomentar si quieres usar Fanart.tv
 
 interface TmdbCollectionDetail {
     id: number;
@@ -58,9 +58,6 @@ export async function importFranchise(franchise: DiscoveredFranchise) {
         try {
             const credits = await fetchMovieCredits(movie.id);
 
-            // Si quisieras usar Fanart.tv, descomenta esto:
-            // const characterArtMap = await getCharacterArtForMovie(movie.id);
-
             const topCast = credits.cast
                 .filter((c) => c.order < 10)
                 .filter((c) => c.character && c.character.trim() !== '')
@@ -74,20 +71,23 @@ export async function importFranchise(franchise: DiscoveredFranchise) {
                 if (!charSlug || uniqueSlugs.has(charSlug)) continue;
                 uniqueSlugs.add(charSlug);
 
-                // --- LÓGICA DE IMAGEN (FOTO DEL ACTOR) ---
+                // --- LÓGICA DE IMAGEN MEJORADA ---
                 let imageUrl: string | null = null;
 
-                if (cast.profile_path) {
-                    // Usamos la foto del actor
-                    imageUrl = `https://image.tmdb.org/t/p/w500${cast.profile_path}`;
-                }
+                // 1. Intentamos buscar el personaje en Wikipedia
+                console.log(`🔍 Buscando imagen para "${name}"...`);
+                const wikiImage = await getWikipediaImage(name);
 
-                // Si prefieres buscar en Fanart.tv primero (descomenta las 4 líneas):
-                // const normalizedCharName = name.toLowerCase().replace(/[^a-z0-9]/g, '');
-                // if (characterArtMap && characterArtMap.has(normalizedCharName)) {
-                //     imageUrl = characterArtMap.get(normalizedCharName)!;
-                // }
-                // ------------------------------------------
+                if (wikiImage) {
+                    imageUrl = wikiImage;
+                } else if (cast.profile_path) {
+                    // 2. Fallback: foto del actor
+                    imageUrl = `https://image.tmdb.org/t/p/w500${cast.profile_path}`;
+                    console.log(`   ⚠️ No hay imagen en Wikipedia, usando foto del actor.`);
+                } else {
+                    console.log(`   ⚠️ Sin imagen para "${name}".`);
+                }
+                // ---------------------------------
 
                 const { data: char, error: charErr } = await supabaseAdmin
                     .from('characters')
