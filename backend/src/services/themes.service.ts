@@ -2,10 +2,10 @@ import {
     findAllActiveThemes,
     findThemeBySlug,
     findCharactersByThemeId,
+    deleteThemeById, // <-- IMPORTANTE: Importar esto
     type ThemeRow,
     type ThemeDetailRow,
     type CharacterPublicRow,
-    deleteThemeById 
 } from '../repositories/themes.repository.js';
 import { findQuestionsByCategories } from '../repositories/questions.repository.js';
 import { HttpError } from '../utils/http-error.js';
@@ -24,9 +24,7 @@ function getSchemaForTheme(theme: ThemeDetailRow) {
     if (isPokemon) {
         return {
             tags: ['species'],
-            form: [
-                { key: 'species', label: 'Tipo Pokémon', type: 'text', placeholder: 'Ej: Fuego, Agua, Planta...' }
-            ]
+            form: [{ key: 'species', label: 'Tipo Pokémon', type: 'text', placeholder: 'Ej: Fuego, Agua...' }]
         };
     }
 
@@ -34,8 +32,8 @@ function getSchemaForTheme(theme: ThemeDetailRow) {
         return {
             tags: ['house', 'species'],
             form: [
-                { key: 'house', label: 'Casa de Hogwarts', type: 'text', placeholder: 'Ej: Gryffindor, Slytherin...' },
-                { key: 'species', label: 'Especie / Rol', type: 'text', placeholder: 'Ej: Mago, Muggle, Elfo...' }
+                { key: 'house', label: 'Casa de Hogwarts', type: 'text', placeholder: 'Ej: Gryffindor...' },
+                { key: 'species', label: 'Especie', type: 'text', placeholder: 'Ej: Mago, Muggle...' }
             ]
         };
     }
@@ -49,7 +47,7 @@ function getSchemaForTheme(theme: ThemeDetailRow) {
             { key: 'has_powers', label: '¿Tiene Poderes?', type: 'boolean' },
             { key: 'uses_weapon', label: '¿Usa Armas?', type: 'boolean' },
             { key: 'is_human', label: '¿Es Humano?', type: 'boolean' },
-            { key: 'species', label: 'Especie / Rol', type: 'text', placeholder: 'Ej: Hobbit, Elfo, Humano...' }
+            { key: 'species', label: 'Especie / Origen', type: 'text', placeholder: 'Ej: Atlantean, Hobbit, Elfo...' }
         ]
     };
 }
@@ -75,9 +73,10 @@ export async function getThemeDetail(slug: string): Promise<ThemeDetailResponse>
     };
 }
 
+// NUEVA FUNCIÓN PARA ELIMINAR
 export async function removeTheme(slug: string): Promise<void> {
-  const theme = await findThemeBySlug(slug);
-  if (!theme) throw HttpError.notFound(`Temática "${slug}" no encontrada`);
-  
-  await deleteThemeById(theme.id);
+    const theme = await findThemeBySlug(slug);
+    if (!theme) throw HttpError.notFound(`Temática "${slug}" no encontrada`);
+
+    await deleteThemeById(theme.id);
 }

@@ -1,3 +1,4 @@
+// frontend/src/pages/DiscoverPage.tsx
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, type DiscoveredFranchise } from '../services/api';
@@ -34,7 +35,6 @@ export function DiscoverPage() {
         try {
             await api.importFranchise(franchise);
             setSuccess(true);
-            // Esperamos 1.5s para que el usuario vea el mensaje de éxito antes de redirigir
             setTimeout(() => {
                 const newSlug = franchise.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
                 nav(`/themes/${newSlug}`);
@@ -54,7 +54,7 @@ export function DiscoverPage() {
                         Descubrir Franquicias
                     </h1>
                     <p className="text-slate-400 max-w-xl mx-auto">
-                        Busca cualquier saga de películas (Ej: Harry Potter, El Señor de los Anillos). Importaremos a sus personajes automáticamente.
+                        Busca películas, series o anime. Importaremos a sus personajes automáticamente.
                     </p>
                 </div>
 
@@ -63,7 +63,7 @@ export function DiscoverPage() {
                         type="text"
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
-                        placeholder="Escribe el nombre de una saga..."
+                        placeholder="Escribe el nombre de una saga o serie..."
                         className="flex-1 bg-transparent px-4 py-3 text-white placeholder-slate-500 focus:outline-none text-lg"
                         disabled={!!importing}
                     />
@@ -88,14 +88,19 @@ export function DiscoverPage() {
                     {results.map((r) => (
                         <div key={r.externalId} className={`bg-slate-900 rounded-2xl overflow-hidden flex border transition-all ${importing === r.externalId ? 'border-purple-500 ring-2 ring-purple-500/50' : 'border-slate-800 hover:border-purple-500/50'}`}>
 
-                            <div className="w-32 shrink-0 bg-slate-950">
+                            <div className="w-32 shrink-0 bg-slate-950 relative">
                                 {r.imageUrl ? (
                                     <img src={r.imageUrl} alt={r.name} className="w-full h-full object-cover" />
                                 ) : (
-                                    <div className="w-full h-full flex items-center justify-center text-slate-600">
-                                        🎬
-                                    </div>
+                                    <div className="w-full h-full flex items-center justify-center text-slate-600">🎬</div>
                                 )}
+                                {/* ETIQUETA DE TIPO */}
+                                <span className={`absolute top-2 left-2 text-[10px] font-bold uppercase px-2 py-1 rounded-md backdrop-blur-md ${r.kind === 'Anime' ? 'bg-pink-600/80 text-white' :
+                                        r.kind === 'Serie' ? 'bg-blue-600/80 text-white' :
+                                            'bg-emerald-600/80 text-white'
+                                    }`}>
+                                    {r.kind === 'Anime' ? '🎌 Anime' : r.kind === 'Serie' ? '📺 Serie' : '🎬 Película'}
+                                </span>
                             </div>
 
                             <div className="p-5 flex-1 flex flex-col justify-between">
@@ -115,7 +120,7 @@ export function DiscoverPage() {
                                             Importando...
                                         </>
                                     ) : (
-                                        <>➕ Importar temática</>
+                                        <>➕ Importar</>
                                     )}
                                 </button>
                             </div>
@@ -124,7 +129,7 @@ export function DiscoverPage() {
                 </div>
 
                 {results.length === 0 && !loading && query && !error && (
-                    <p className="text-center text-slate-500 py-10">No se encontraron sagas con ese nombre en TMDB.</p>
+                    <p className="text-center text-slate-500 py-10">No se encontraron resultados.</p>
                 )}
             </div>
         </div>

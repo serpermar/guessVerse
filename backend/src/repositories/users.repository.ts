@@ -32,3 +32,19 @@ export async function updateUser(
     if (error || !data) throw new Error(`Error actualizando usuario: ${error?.message}`);
     return data;
 }
+
+export async function deleteThemeById(themeId: string): Promise<void> {
+    // 1. Borrar partidas asociadas a esta temática
+    const { error: gamesError } = await supabaseAdmin
+        .from('games')
+        .delete()
+        .eq('theme_id', themeId);
+
+    if (gamesError) {
+        console.warn(`Aviso al borrar partidas: ${gamesError.message}`);
+    }
+
+    // 2. Borrar la temática
+    const { error } = await supabaseAdmin.from('themes').delete().eq('id', themeId);
+    if (error) throw new Error(`Error eliminando temática: ${error.message}`);
+}

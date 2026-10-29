@@ -1,7 +1,7 @@
+// backend/src/integrations/fandom/client.ts
+
 interface FandomSearchResponse {
-    query?: {
-        search?: { title: string }[];
-    };
+    query?: { search?: { title: string }[]; };
 }
 
 interface FandomImageResponse {
@@ -13,32 +13,33 @@ interface FandomImageResponse {
     };
 }
 
-/**
- * Busca la imagen de un personaje en un wiki específico de Fandom.
- */
 export async function getFandomImage(domain: string, characterName: string): Promise<string | null> {
-    try {
-        // 1. Primero, buscamos el título exacto del artículo en Fandom
-        const searchUrl = `https://${domain}/api.php?action=query&list=search&srsearch=${encodeURIComponent(characterName)}&format=json&origin=*`;
-        const searchRes = await fetch(searchUrl);
-        const searchData = (await searchRes.json()) as FandomSearchResponse;
+    const cleanName = characterName.replace(/^(captain|capitán|mr\.|mrs\.|dr\.|lord|king|queen)\s+/i, '').trim();
+    const searchQueries = [characterName, cleanName];
 
-        const bestMatch = searchData.query?.search?.[0]?.title;
-        if (!bestMatch) return null;
+    for (const query of searchQueries) {
+        try {
+            const searchUrl = `https://${domain}/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&format=json&origin=*`;
+            const searchRes = await fetch(searchUrl);
+            const searchData = (await searchRes.json()) as FandomSearchResponse;
 
-        // 2. Con el título exacto, pedimos la imagen principal (pageimages)
-        const imageUrl = `https://${domain}/api.php?action=query&titles=${encodeURIComponent(bestMatch)}&prop=pageimages&format=json&pithumbsize=500&origin=*`;
-        const imageRes = await fetch(imageUrl);
-        const imageData = (await imageRes.json()) as FandomImageResponse;
+            const bestMatch = searchData.query?.search?.[0]?.title;
+            if (!bestMatch) continue;
 
-        const pages = imageData.query?.pages;
-        if (!pages) return null;
+            const imageUrl = `https://${domain}/api.php?action=query&titles=${encodeURIComponent(bestMatch)}&prop=pageimages&format=json&pithumbsize=500&origin=*`;
+            const imageRes = await fetch(imageUrl);
+            const imageData = (await imageRes.json()) as FandomImageResponse;
 
-        const page = Object.values(pages)[0];
-        if (page?.missing !== undefined || !page?.thumbnail?.source) return null;
+            const pages = imageData.query?.pages;
+            if (!pages) continue;
 
-        return page.thumbnail.source;
-    } catch (error) {
-        return null;
+            const page = Object.values(pages)[0];
+            if (page?.missing !== undefined || !page?.thumbnail?.source) continue;
+
+            return page.thumbnail.source;
+        } catch (error) {
+            // Silencioso, probamos la siguiente variante
+        }
     }
+    return null;
 }

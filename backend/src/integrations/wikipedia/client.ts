@@ -1,33 +1,32 @@
+// backend/src/integrations/wikipedia/client.ts
+
 interface WikipediaPage {
-    pageid?: number;
-    title?: string;
     missing?: string;
-    thumbnail?: {
-        source: string;
-        width: number;
-        height: number;
-    };
+    thumbnail?: { source: string; };
 }
 
 interface WikipediaResponse {
-    query?: {
-        pages?: Record<string, WikipediaPage>;
-    };
+    query?: { pages?: Record<string, WikipediaPage>; };
 }
 
-/**
- * Busca la imagen principal de un personaje en Wikipedia.
- * Prueba varias variantes del nombre para maximizar las coincidencias.
- */
 export async function getWikipediaImage(characterName: string): Promise<string | null> {
+    // Limpiamos títulos comunes que a veces estropean la búsqueda
+    const cleanName = characterName.replace(/^(captain|capitán|mr\.|mrs\.|dr\.|lord|king|queen)\s+/i, '').trim();
+
     const variants = [
         characterName,
+        cleanName,
         `${characterName} (character)`,
+        `${cleanName} (character)`,
+        `${characterName} (fictional character)`,
+        `${characterName} (film)`,
         `${characterName} (The Matrix)`,
         `${characterName} (Middle-earth)`,
     ];
 
-    for (const variant of variants) {
+    const uniqueVariants = [...new Set(variants)];
+
+    for (const variant of uniqueVariants) {
         try {
             const url = `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(variant)}&prop=pageimages&format=json&pithumbsize=500&origin=*`;
             const res = await fetch(url);
@@ -37,17 +36,12 @@ export async function getWikipediaImage(characterName: string): Promise<string |
             if (!pages) continue;
 
             const page = Object.values(pages)[0];
-            if (!page) continue;
-
-            if (page.missing !== undefined || !page.thumbnail?.source) {
-                continue;
-            }
+            if (!page || page.missing !== undefined || !page.thumbnail?.source) continue;
 
             return page.thumbnail.source;
         } catch (error) {
-            // Silencioso, probamos la siguiente variante
+            // Silencioso
         }
     }
-
     return null;
 }

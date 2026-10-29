@@ -117,6 +117,7 @@ export interface ThemeDetail {
 
 export interface DiscoveredFranchise {
     source: string;
+    kind: 'Película' | 'Serie' | 'Anime';
     externalId: string;
     name: string;
     description: string;

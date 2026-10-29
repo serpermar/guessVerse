@@ -15,15 +15,18 @@ export async function getQuestionsForTheme(themeSlug: string): Promise<QuestionD
     const cats = (theme.question_categories ?? []) as string[];
     const baseQuestions = await findQuestionsByCategories(cats);
 
-    // Inyectar preguntas dinámicas basadas en las especies de los personajes
     const characters = await findCharactersByThemeId(theme.id);
+
+    // LEER TANTO DE 'attributes' COMO DE LA COLUMNA ANTIGUA 'species'
     const uniqueSpecies = new Set(
         characters
-            .map((c) => c.species?.toLowerCase().trim())
+            .map((c) => {
+                const spec = c.attributes?.species || c.species;
+                return spec ? spec.toLowerCase().trim() : null;
+            })
             .filter((s): s is string => !!s && s !== 'human' && s !== 'humano')
     );
 
-    // Mapeamos las especies a un objeto QuestionDto válido para el frontend
     const dynamicQuestions: QuestionDto[] = Array.from(uniqueSpecies).map((specie) => ({
         id: `dyn_${specie}`,
         code: `dyn_species_${specie.replace(/\s+/g, '_')}`,
