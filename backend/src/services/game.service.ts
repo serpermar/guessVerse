@@ -123,22 +123,28 @@ export async function askQuestion(gameId: string, questionCode: string, userId: 
     if (game.created_by !== userId) throw HttpError.forbidden('No eres el dueño de esta partida');
     if (game.status !== 'playing') throw HttpError.conflict(`La partida ya terminó (${game.status})`);
 
-    const themeRaw = game.themes as unknown;
-    const theme = (Array.isArray(themeRaw) ? themeRaw[0] : themeRaw) as
-        | { question_categories: string[] | null }
-        | null;
-    const allowedCategories = theme?.question_categories ?? [];
+    let question: any = null;
 
-    const { data: question, error: qErr } = await supabaseAdmin
-        .from('questions')
-        .select('*')
-        .eq('code', questionCode)
-        .eq('is_active', true)
-        .single();
-    if (qErr || !question) throw HttpError.notFound(`Pregunta "${questionCode}" no existe`);
-
-    if (!question.category || !allowedCategories.includes(question.category)) {
-        throw HttpError.badRequest(`La pregunta "${questionCode}" no aplica a esta temática`);
+    // NUEVO: Si la pregunta es dinámica, la creamos al vuelo
+    if (questionCode.startsWith('dyn_species_')) {
+        const specie = questionCode.replace('dyn_species_', '').replace(/_/g, ' ');
+        question = {
+            code: questionCode,
+            text_es: `¿Es un/a ${specie}?`,
+            attribute: 'species',
+            operator: 'eq',
+            value: { v: specie }
+        };
+    } else {
+        // Pregunta normal desde la base de datos
+        const { data: dbQuestion, error: qErr } = await supabaseAdmin
+            .from('questions')
+            .select('*')
+            .eq('code', questionCode)
+            .eq('is_active', true)
+            .single();
+        if (qErr || !dbQuestion) throw HttpError.notFound(`Pregunta "${questionCode}" no existe`);
+        question = dbQuestion;
     }
 
     const { data: secretChar } = await supabaseAdmin
@@ -178,7 +184,8 @@ export async function askQuestion(gameId: string, questionCode: string, userId: 
 
     const { error: logErr } = await supabaseAdmin.from('game_questions').insert({
         game_id: gameId,
-        question_id: question.id,
+        // Si es dinámica, no hay un UUID real de pregunta, así que guardamos null (asegúrate de que la columna lo permita)
+        question_id: question.id || null,
         answer,
     });
     if (logErr) throw new Error(`Error registrando pregunta: ${logErr.message}`);

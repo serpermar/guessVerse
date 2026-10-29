@@ -1,9 +1,7 @@
-import { supabase } from '../lib/supabase';
-
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
-    const { data: { session } } = await supabase.auth.getSession();
+    const { data: { session } } = await import('./../lib/supabase').then(m => m.supabase.auth.getSession());
 
     const headers: Record<string, string> = {
         'Content-Type': 'application/json',
@@ -28,6 +26,7 @@ export interface Theme {
     name: string;
     description: string | null;
     image_url: string | null;
+    type: string; // <-- Asegúrate de que está aquí
 }
 
 export interface CharacterCard {
@@ -94,7 +93,7 @@ export interface CharacterDetail {
     id: string;
     name: string;
     image_url: string | null;
-    gender: string | null;
+    gender: string | null; // <-- Asegúrate de que está aquí
     species: string | null;
     house: string | null;
     is_human: boolean | null;
@@ -121,10 +120,11 @@ export interface DiscoveredFranchise {
 
 // ---------- API ----------
 export const api = {
-    themeDetail: (slug: string) =>
-        req<ThemeDetail>(`/api/themes/${slug}`),
     themes: () =>
         req<{ data: Theme[] }>('/api/themes').then((r) => r.data),
+
+    themeDetail: (slug: string) =>
+        req<ThemeDetail>(`/api/themes/${slug}`),
 
     questions: (themeSlug: string) =>
         req<{ data: QuestionDto[] }>(`/api/themes/${themeSlug}/questions`).then((r) => r.data),
@@ -164,6 +164,13 @@ export const api = {
     myGames: (limit = 20) =>
         req<{ data: GameHistoryItem[] }>(`/api/users/me/games?limit=${limit}`).then((r) => r.data),
 
+    updateCharacter: (id: string, data: Partial<CharacterDetail>) =>
+        req<{ data: CharacterDetail }>(`/api/characters/${id}`, {
+            method: 'PATCH',
+            body: JSON.stringify(data),
+        }).then((r) => r.data),
+
+    // ----- Discover -----
     discover: (query: string) =>
         req<{ data: DiscoveredFranchise[] }>(`/api/discover?q=${encodeURIComponent(query)}`).then(r => r.data),
 

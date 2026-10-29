@@ -24,10 +24,32 @@ export async function getThemeDetail(slug: string): Promise<ThemeDetailResponse>
     const theme = await findThemeBySlug(slug);
     if (!theme) throw HttpError.notFound(`Temática "${slug}" no encontrada`);
 
-    const [characters, questions] = await Promise.all([
+    const [characters, baseQuestions] = await Promise.all([
         findCharactersByThemeId(theme.id),
         findQuestionsByCategories(theme.question_categories ?? []),
     ]);
 
-    return { theme, characters, questions };
+    // Generar preguntas dinámicas basadas en las especies de los personajes
+    const uniqueSpecies = new Set(
+        characters
+            .map((c) => c.species?.toLowerCase().trim())
+            .filter((s): s is string => !!s && s !== 'human' && s !== 'humano')
+    );
+
+    const dynamicQuestions = Array.from(uniqueSpecies).map((specie) => ({
+        code: `dyn_species_${specie}`,
+        text_es: `¿Es un/a ${specie}?`,
+        category: 'dynamic',
+        // Estos campos no se envían al frontend, pero los necesitamos para el juego
+        attribute: 'species',
+        operator: 'eq',
+        value: { v: specie },
+    }));
+
+    return {
+        theme,
+        characters,
+        // Unimos las preguntas base con las dinámicas
+        questions: [...baseQuestions, ...(dynamicQuestions as any[])]
+    };
 }

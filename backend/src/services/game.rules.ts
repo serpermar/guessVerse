@@ -11,12 +11,25 @@ export type Answer = 'yes' | 'no' | 'unknown';
 /** Evalúa el atributo del personaje contra la condición de la pregunta. */
 export function evaluate(value: unknown, operator: string, expected: unknown): Answer {
     if (value === null || value === undefined) return 'unknown';
+
     switch (operator) {
-        case 'eq': return value === expected ? 'yes' : 'no';
-        case 'ne': return value !== expected ? 'yes' : 'no';
-        case 'in': return Array.isArray(expected) && expected.includes(value) ? 'yes' : 'no';
-        case 'not_in': return Array.isArray(expected) && !expected.includes(value) ? 'yes' : 'no';
-        default: return 'unknown';
+        case 'eq':
+            // Si ambos son strings, comparamos en minúsculas para evitar fallos
+            if (typeof value === 'string' && typeof expected === 'string') {
+                return value.toLowerCase().trim() === expected.toLowerCase().trim() ? 'yes' : 'no';
+            }
+            return value === expected ? 'yes' : 'no';
+        case 'ne':
+            if (typeof value === 'string' && typeof expected === 'string') {
+                return value.toLowerCase().trim() !== expected.toLowerCase().trim() ? 'yes' : 'no';
+            }
+            return value !== expected ? 'yes' : 'no';
+        case 'in':
+            return Array.isArray(expected) && expected.includes(value) ? 'yes' : 'no';
+        case 'not_in':
+            return Array.isArray(expected) && !expected.includes(value) ? 'yes' : 'no';
+        default:
+            return 'unknown';
     }
 }
 

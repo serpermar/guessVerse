@@ -1,7 +1,8 @@
 import { DiscoveredFranchise } from './discover.service.js';
 import { tmdbFetch } from '../integrations/tmdb/client.js';
 import { fetchMovieCredits } from '../integrations/tmdb/credits.js';
-import { getWikipediaImage } from '../integrations/wikipedia/client.js'; // <-- NUEVO
+import { getWikipediaImage } from '../integrations/wikipedia/client.js';
+import { getFandomImage } from '../integrations/fandom/client.js';
 import { supabaseAdmin } from '../db/supabase.js';
 import { slugify } from '../utils/text.js';
 
@@ -12,10 +13,21 @@ interface TmdbCollectionDetail {
     parts: { id: number; title: string }[];
 }
 
+// Mapa de franquicias a sus wikis de Fandom
+// Puedes añadir más aquí a medida que importes nuevas sagas
+const FANDOM_DOMAINS: Record<string, string> = {
+    'the-lord-of-the-rings-collection': 'lotr.fandom.com',
+    'the-matrix-collection': 'matrix.fandom.com',
+    'back-to-the-future-collection': 'backtothefuture.fandom.com',
+    'alien-collection': 'alien.fandom.com',
+    'one-piece-collection': 'onepiece.fandom.com',
+};
+
 export async function importFranchise(franchise: DiscoveredFranchise) {
     if (franchise.source !== 'tmdb') throw new Error('Fuente no soportada aún');
 
     const themeSlug = slugify(franchise.name);
+    const fandomDomain = FANDOM_DOMAINS[themeSlug]; // ¿Tenemos wiki de Fandom para esta saga?
 
     // 1. Crear o actualizar el Theme
     const { data: theme, error: themeErr } = await supabaseAdmin
@@ -71,23 +83,34 @@ export async function importFranchise(franchise: DiscoveredFranchise) {
                 if (!charSlug || uniqueSlugs.has(charSlug)) continue;
                 uniqueSlugs.add(charSlug);
 
-                // --- LÓGICA DE IMAGEN MEJORADA ---
+                // --- LÓGICA DE IMAGEN EN CASCADA ---
                 let imageUrl: string | null = null;
-
-                // 1. Intentamos buscar el personaje en Wikipedia
                 console.log(`🔍 Buscando imagen para "${name}"...`);
-                const wikiImage = await getWikipediaImage(name);
 
-                if (wikiImage) {
-                    imageUrl = wikiImage;
-                } else if (cast.profile_path) {
-                    // 2. Fallback: foto del actor
-                    imageUrl = `https://image.tmdb.org/t/p/w500${cast.profile_path}`;
-                    console.log(`   ⚠️ No hay imagen en Wikipedia, usando foto del actor.`);
-                } else {
-                    console.log(`   ⚠️ Sin imagen para "${name}".`);
+                // 1. Intentar Fandom (si tenemos el dominio configurado)
+                if (fandomDomain) {
+                    const fandomImg = await getFandomImage(fandomDomain, name);
+                    if (fandomImg) {
+                        imageUrl = fandomImg;
+                        console.log(`   ✅ Fandom: ${imageUrl}`);
+                    }
                 }
-                // ---------------------------------
+
+                // 2. Si Fandom falla, intentar Wikipedia
+                if (!imageUrl) {
+                    const wikiImg = await getWikipediaImage(name);
+                    if (wikiImg) {
+                        imageUrl = wikiImg;
+                        console.log(`   ✅ Wikipedia: ${imageUrl}`);
+                    }
+                }
+
+                // 3. Si ambas fallan, usar la foto del actor
+                if (!imageUrl && cast.profile_path) {
+                    imageUrl = `https://image.tmdb.org/t/p/w500${cast.profile_path}`;
+                    console.log(`   ⚠️ Usando foto del actor.`);
+                }
+                // -----------------------------------
 
                 const { data: char, error: charErr } = await supabaseAdmin
                     .from('characters')

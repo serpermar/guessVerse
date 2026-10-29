@@ -11,6 +11,7 @@ import { questionsRouter } from './routes/questions.routes.js';
 import { errorHandler, notFoundHandler } from './middleware/error.middleware.js';
 import { usersRouter } from './routes/users.routes.js';
 import { discoverRouter } from './routes/discover.routes.js';
+import { charactersRouter } from './routes/characters.routes.js';
 
 export const app = express();
 
@@ -42,6 +43,7 @@ app.use('/api/themes', questionsRouter);
 app.use('/api/games', gamesRouter);
 app.use('/api/users', usersRouter);
 app.use('/api/discover', discoverRouter);
+app.use('/api/characters', charactersRouter);
 app.get('/api/health', (_req, res) => {
     res.json({
         status: 'ok',
