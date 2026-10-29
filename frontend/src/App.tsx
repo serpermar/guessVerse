@@ -3,7 +3,6 @@ import { AuthProvider } from './features/auth/AuthProvider';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { AppHeader } from './components/AppHeader';
 import { ProtectedRoute } from './components/ProtectedRoute';
-
 import { HomePage } from './pages/HomePage';
 import { GamePage } from './pages/GamePage';
 import { LoginPage } from './pages/LoginPage';
@@ -12,6 +11,8 @@ import { AuthCallbackPage } from './pages/AuthCallbackPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { ThemeDetailPage } from './pages/ThemeDetailPage';
 import { DiscoverPage } from './pages/DiscoverPage';
+import { LobbyPage } from './pages/LobbyPage';
+import { MultiplayerGamePage } from './pages/MultiplayerGamePage';
 
 function App() {
   return (
@@ -33,6 +34,8 @@ function App() {
                 <Route path="/profile" element={<ProfilePage />} />
                 <Route path="/themes/:slug" element={<ThemeDetailPage />} />
                 <Route path="/discover" element={<DiscoverPage />} />
+                <Route path="/lobby" element={<LobbyPage />} />
+                <Route path="/multiplayer/:gameId" element={<MultiplayerGamePage />} />
               </Route>
 
               {/* Redirección por defecto */}

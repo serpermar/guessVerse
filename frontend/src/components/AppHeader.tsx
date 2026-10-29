@@ -19,6 +19,9 @@ export function AppHeader() {
             <div className="flex gap-4 items-center">
                 {user ? (
                     <>
+                        <Link to="/lobby" className="text-sm font-semibold bg-blue-600/20 text-blue-300 hover:bg-blue-600/40 px-3 py-1.5 rounded-lg border border-blue-500/30 transition">
+                            ⚔️ Multijugador
+                        </Link>
                         <Link to="/discover" className="text-sm font-semibold bg-purple-600/20 text-purple-300 hover:bg-purple-600/40 px-3 py-1.5 rounded-lg border border-purple-500/30 transition flex items-center gap-1">
                             <span>✨</span> Descubrir
                         </Link>
