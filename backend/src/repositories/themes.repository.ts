@@ -29,6 +29,7 @@ export interface CharacterPublicRow {
     is_protagonist: boolean | null;
     has_powers: boolean | null;
     uses_weapon: boolean | null;
+    attributes: Record<string, any> | null; // <-- NUEVO
 }
 
 export async function findAllActiveThemes(): Promise<ThemeRow[]> {
@@ -67,10 +68,19 @@ export async function findCharactersByThemeId(themeId: string): Promise<Characte
 
     const { data, error } = await supabaseAdmin
         .from('characters')
-        .select('id, name, image_url, gender, species, house, is_human, is_hero, is_villain, is_protagonist, has_powers, uses_weapon')
+        .select('id, name, image_url, gender, species, house, is_human, is_hero, is_villain, is_protagonist, has_powers, uses_weapon, attributes')
         .in('franchise_id', ids)
         .order('name', { ascending: true });
 
     if (error) throw new Error(`Error leyendo personajes: ${error.message}`);
     return data ?? [];
+}
+
+export async function deleteThemeById(themeId: string): Promise<void> {
+  // 1. Borrar partidas asociadas a esta temática para evitar errores de FK
+  await supabaseAdmin.from('games').delete().eq('theme_id', themeId);
+  
+  // 2. Borrar la temática (esto borrará en cascada franchises y characters)
+  const { error } = await supabaseAdmin.from('themes').delete().eq('id', themeId);
+  if (error) throw new Error(`Error eliminando temática: ${error.message}`);
 }

@@ -10,23 +10,24 @@ const updateSchema = z.object({
     has_powers: z.boolean().nullable().optional(),
     uses_weapon: z.boolean().nullable().optional(),
     is_human: z.boolean().nullable().optional(),
-    species: z.string().nullable().optional(),
+    attributes: z.record(z.string(), z.any()).optional(), // <-- CORREGIDO
 });
 
 export const patchCharacter = asyncHandler(async (req: Request<{ id: string }>, res: Response) => {
     const data = updateSchema.parse(req.body);
 
-    // Limpiamos los datos antes de guardarlos
-    const cleanData = {
-        is_hero: data.is_hero ?? false,
-        is_villain: data.is_villain ?? false,
-        is_protagonist: data.is_protagonist ?? false,
-        has_powers: data.has_powers ?? false,
-        uses_weapon: data.uses_weapon ?? false,
-        is_human: data.is_human ?? false,
-        // Si el string está vacío o solo tiene espacios, lo guardamos como null
-        species: !data.species || data.species.trim() === '' ? null : data.species.trim(),
-    };
+    const cleanData: any = {};
+
+    if (data.is_hero !== undefined) cleanData.is_hero = data.is_hero ?? false;
+    if (data.is_villain !== undefined) cleanData.is_villain = data.is_villain ?? false;
+    if (data.is_protagonist !== undefined) cleanData.is_protagonist = data.is_protagonist ?? false;
+    if (data.has_powers !== undefined) cleanData.has_powers = data.has_powers ?? false;
+    if (data.uses_weapon !== undefined) cleanData.uses_weapon = data.uses_weapon ?? false;
+    if (data.is_human !== undefined) cleanData.is_human = data.is_human ?? false;
+
+    if (data.attributes) {
+        cleanData.attributes = data.attributes;
+    }
 
     const { data: char, error } = await supabaseAdmin
         .from('characters')

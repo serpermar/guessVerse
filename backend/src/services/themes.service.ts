@@ -5,15 +5,53 @@ import {
     type ThemeRow,
     type ThemeDetailRow,
     type CharacterPublicRow,
+    deleteThemeById 
 } from '../repositories/themes.repository.js';
 import { findQuestionsByCategories } from '../repositories/questions.repository.js';
 import { HttpError } from '../utils/http-error.js';
 
-// Asumimos que QuestionDto es lo que devuelve findQuestionsByCategories
 export interface ThemeDetailResponse {
     theme: ThemeDetailRow;
     characters: CharacterPublicRow[];
-    questions: any[]; // Usamos any[] temporalmente si no tienes exportado QuestionDto
+    questions: any[];
+    schema: any;
+}
+
+function getSchemaForTheme(theme: ThemeDetailRow) {
+    const isPokemon = theme.slug.includes('pokemon');
+    const isHarryPotter = theme.slug.includes('harry-potter');
+
+    if (isPokemon) {
+        return {
+            tags: ['species'],
+            form: [
+                { key: 'species', label: 'Tipo Pokémon', type: 'text', placeholder: 'Ej: Fuego, Agua, Planta...' }
+            ]
+        };
+    }
+
+    if (isHarryPotter) {
+        return {
+            tags: ['house', 'species'],
+            form: [
+                { key: 'house', label: 'Casa de Hogwarts', type: 'text', placeholder: 'Ej: Gryffindor, Slytherin...' },
+                { key: 'species', label: 'Especie / Rol', type: 'text', placeholder: 'Ej: Mago, Muggle, Elfo...' }
+            ]
+        };
+    }
+
+    return {
+        tags: ['is_hero', 'is_villain', 'has_powers', 'species'],
+        form: [
+            { key: 'is_hero', label: '¿Es un Héroe?', type: 'boolean' },
+            { key: 'is_villain', label: '¿Es un Villano?', type: 'boolean' },
+            { key: 'is_protagonist', label: '¿Es Protagonista?', type: 'boolean' },
+            { key: 'has_powers', label: '¿Tiene Poderes?', type: 'boolean' },
+            { key: 'uses_weapon', label: '¿Usa Armas?', type: 'boolean' },
+            { key: 'is_human', label: '¿Es Humano?', type: 'boolean' },
+            { key: 'species', label: 'Especie / Rol', type: 'text', placeholder: 'Ej: Hobbit, Elfo, Humano...' }
+        ]
+    };
 }
 
 export async function listThemes(): Promise<ThemeRow[]> {
@@ -24,32 +62,22 @@ export async function getThemeDetail(slug: string): Promise<ThemeDetailResponse>
     const theme = await findThemeBySlug(slug);
     if (!theme) throw HttpError.notFound(`Temática "${slug}" no encontrada`);
 
-    const [characters, baseQuestions] = await Promise.all([
+    const [characters, questions] = await Promise.all([
         findCharactersByThemeId(theme.id),
         findQuestionsByCategories(theme.question_categories ?? []),
     ]);
 
-    // Generar preguntas dinámicas basadas en las especies de los personajes
-    const uniqueSpecies = new Set(
-        characters
-            .map((c) => c.species?.toLowerCase().trim())
-            .filter((s): s is string => !!s && s !== 'human' && s !== 'humano')
-    );
-
-    const dynamicQuestions = Array.from(uniqueSpecies).map((specie) => ({
-        code: `dyn_species_${specie}`,
-        text_es: `¿Es un/a ${specie}?`,
-        category: 'dynamic',
-        // Estos campos no se envían al frontend, pero los necesitamos para el juego
-        attribute: 'species',
-        operator: 'eq',
-        value: { v: specie },
-    }));
-
     return {
         theme,
         characters,
-        // Unimos las preguntas base con las dinámicas
-        questions: [...baseQuestions, ...(dynamicQuestions as any[])]
+        questions,
+        schema: getSchemaForTheme(theme)
     };
+}
+
+export async function removeTheme(slug: string): Promise<void> {
+  const theme = await findThemeBySlug(slug);
+  if (!theme) throw HttpError.notFound(`Temática "${slug}" no encontrada`);
+  
+  await deleteThemeById(theme.id);
 }

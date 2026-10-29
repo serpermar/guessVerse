@@ -26,7 +26,7 @@ export interface Theme {
     name: string;
     description: string | null;
     image_url: string | null;
-    type: string; // <-- Asegúrate de que está aquí
+    type: string;
 }
 
 export interface CharacterCard {
@@ -93,7 +93,7 @@ export interface CharacterDetail {
     id: string;
     name: string;
     image_url: string | null;
-    gender: string | null; // <-- Asegúrate de que está aquí
+    gender: string | null;
     species: string | null;
     house: string | null;
     is_human: boolean | null;
@@ -102,12 +102,17 @@ export interface CharacterDetail {
     is_protagonist: boolean | null;
     has_powers: boolean | null;
     uses_weapon: boolean | null;
+    attributes?: Record<string, any>;
 }
 
 export interface ThemeDetail {
     theme: Theme & { question_categories?: string[] | null };
     characters: CharacterDetail[];
     questions: QuestionDto[];
+    schema: {
+        tags: string[];
+        form: { key: string; label: string; type: 'boolean' | 'text'; placeholder?: string }[];
+    };
 }
 
 export interface DiscoveredFranchise {
@@ -150,7 +155,6 @@ export const api = {
     abandon: (gameId: string) =>
         req<{ status: 'lost' }>(`/api/games/${gameId}/abandon`, { method: 'POST' }),
 
-    // ----- Usuarios -----
     me: () => req<{ data: UserProfile }>('/api/users/me').then((r) => r.data),
 
     updateMe: (patch: { username?: string; avatar_url?: string }) =>
@@ -170,7 +174,6 @@ export const api = {
             body: JSON.stringify(data),
         }).then((r) => r.data),
 
-    // ----- Discover -----
     discover: (query: string) =>
         req<{ data: DiscoveredFranchise[] }>(`/api/discover?q=${encodeURIComponent(query)}`).then(r => r.data),
 
@@ -179,4 +182,7 @@ export const api = {
             method: 'POST',
             body: JSON.stringify(franchise),
         }),
+
+    deleteTheme: (slug: string) =>
+        req<{ ok: boolean }>(`/api/themes/${slug}`, { method: 'DELETE' }),
 };
