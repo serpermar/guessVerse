@@ -1,4 +1,4 @@
-fe# Autenticación — GuessVerse
+# Autenticación — GuessVerse
 
 Documento de referencia del flujo de autenticación implementado en el Bloque 1.
 
@@ -6,11 +6,10 @@ Documento de referencia del flujo de autenticación implementado en el Bloque 1.
 
 ## 1. Visión general
 
-- **Proveedor**: Supabase Auth (email + password).
-- **Verificación**: email obligatorio para activar la cuenta.
-- **Usuario**: `public.users` vinculado 1:1 con `auth.users` vía trigger.
-- **Sesión**: JWT gestionado por `@supabase/supabase-js` en el frontend,
-  verificado en el backend con `service_role`.
+- **Proveedor:** Supabase Auth (email + password).
+- **Verificación:** email obligatorio para activar la cuenta.
+- **Usuario:** `public.users` vinculado 1:1 con `auth.users` vía trigger.
+- **Sesión:** JWT gestionado por `@supabase/supabase-js` en el frontend y verificado en el backend mediante `supabaseAdmin.auth.getUser()`.
 
 ---
 
@@ -20,27 +19,27 @@ Documento de referencia del flujo de autenticación implementado en el Bloque 1.
 - [x] **Confirm email** activo.
 
 ### Authentication → URL Configuration
-- [x] **Site URL**: `http://localhost:5173` (en prod será el dominio).
-- [x] **Redirect URLs**:
+- [x] **Site URL:** `http://localhost:5173` (en producción será el dominio).
+- [x] **Redirect URLs:**
   - `http://localhost:5173/auth/callback`
   - `http://localhost:5173/**`
 
 ### Authentication → Email Templates → Confirm sign up
 - [x] Enlace:
-  ```html
-  <a href="{{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&type=signup&next={{ .RedirectTo }}">
-    Confirmar mi cuenta
-  </a>
-  ```
 
-> Si el `emailRedirectTo` que pasa el cliente no está en la allow-list,
-> Supabase ignora el redirect y usa `Site URL`.
+```html
+<a href="{{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&type=signup&next={{ .RedirectTo }}">
+  Confirmar mi cuenta
+</a>
+```
+
+> Si el `emailRedirectTo` que pasa el cliente no está en la allow-list, Supabase ignora el redirect y usa `Site URL`.
 
 ---
 
 ## 3. Flujo de registro
 
-```
+```text
 [RegisterPage]
   → supabase.auth.signUp({
       email, password,
@@ -66,7 +65,7 @@ Documento de referencia del flujo de autenticación implementado en el Bloque 1.
 
 ## 4. Flujo de login
 
-```
+```text
 [LoginPage]
   → supabase.auth.signInWithPassword({ email, password })
        ↓
@@ -81,7 +80,7 @@ Documento de referencia del flujo de autenticación implementado en el Bloque 1.
 
 ## 5. Flujo de logout
 
-```
+```text
 [ProfilePage / AppHeader]
   → supabase.auth.signOut()
        ↓
@@ -132,9 +131,9 @@ $$;
 **Comportamiento:**
 - Lee `username` del metadata si existe.
 - Fallback a la parte local del email (`user@x.com` → `user`).
-- Sanea: minúsculas, sin símbolos, máximo 20 chars.
-- Fallback adicional `user_<id>` si el saneado deja <3 chars.
-- Resuelve colisiones: `username`, `username_1`, `username_2`…
+- Sanea: minúsculas, sin símbolos, máximo 20 caracteres.
+- Fallback adicional `user_<id>` si el saneado deja menos de 3 caracteres.
+- Resuelve colisiones: `username`, `username_1`, `username_2`, etc.
 
 ---
 
@@ -143,18 +142,18 @@ $$;
 ### `auth.middleware.ts`
 
 ```ts
-requireAuth(req, res, next) // 401 si falta o inválido → adjunta req.user
+requireAuth(req, res, next) // 401 si falta o es inválido; adjunta req.user
 optionalAuth(req, res, next) // no falla si no hay token
 ```
 
 Verificación:
+
 ```ts
 const { data: { user }, error } =
   await supabaseAdmin.auth.getUser(token);
 ```
 
-`supabaseAdmin.auth.getUser(jwt)` valida la firma y devuelve el usuario.
-No hace falta verificar el JWT a mano.
+`supabaseAdmin.auth.getUser(jwt)` valida el token y devuelve el usuario. No hace falta verificar el JWT manualmente.
 
 ### `types/express.d.ts`
 
@@ -183,16 +182,15 @@ router.post('/', requireAuth, postCreateGame);
 | Método | Ruta | Descripción |
 |---|---|---|
 | GET | `/api/users/me` | Perfil (id, email, username, avatar_url) |
-| PATCH | `/api/users/me` | Editar username (3-20, `[a-z0-9_]`) o avatar |
+| PATCH | `/api/users/me` | Editar username (3–20, `[a-z0-9_]`) o avatar |
 | GET | `/api/users/me/stats` | `games_played`, `won`, `lost`, `abandoned`, `questions_asked`, `win_rate` |
-| GET | `/api/users/me/games?limit=20` | Historial paginado (max 50) |
+| GET | `/api/users/me/games?limit=20` | Historial paginado (máximo 50) |
 
 ---
 
 ## 9. Ownership de partidas
 
-`game.service.ts` valida en `askQuestion`, `guessCharacter`, `abandonGame`,
-`getGame`:
+`game.service.ts` valida la propiedad en `askQuestion`, `guessCharacter`, `abandonGame` y `getGame`:
 
 ```ts
 if (game.created_by !== userId) {
@@ -224,10 +222,10 @@ Al abandonar:
 
 `recordGameResult` actualiza:
 - `games_played` +1
-- `games_won` / `games_lost` / `games_abandoned` según status
+- `games_won` / `games_lost` / `games_abandoned` según el estado
 - `questions_asked` + N
 - `avg_duration_seconds` (media incremental)
-- `win_rate` calculado en `getStats()`
+- `win_rate`, calculado en `getStats()`
 
 ---
 
@@ -242,10 +240,10 @@ Al abandonar:
 
 ## 13. Testing manual (checklist)
 
-- [ ] Registro con username → email llega.
+- [ ] Registro con username → llega el email.
 - [ ] Clic en el enlace → redirige a `/profile`.
-- [ ] `public.users` tiene el `username` del metadata (no el fallback).
-- [ ] Registro con username repetido → recibe `_1`.
+- [ ] `public.users` contiene el username del metadata (no el fallback).
+- [ ] Registro con username repetido → recibe sufijo `_1`.
 - [ ] Logout → `/login` funciona con las credenciales.
 - [ ] Recargar página estando logueado → sesión persiste.
 - [ ] `POST /api/games` sin token → `401`.
