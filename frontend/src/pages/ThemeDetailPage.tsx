@@ -57,6 +57,12 @@ export function ThemeDetailPage() {
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [deleting, setDeleting] = useState(false);
 
+    // Estados para añadir pregunta personalizada
+    const [showAddQuestion, setShowAddQuestion] = useState(false);
+    const [newQuestionText, setNewQuestionText] = useState('');
+    const [newQuestionAttr, setNewQuestionAttr] = useState('');
+    const [savingQuestion, setSavingQuestion] = useState(false);
+
     const loadDetail = () => {
         if (!slug) return;
         setLoading(true);
@@ -86,7 +92,17 @@ export function ThemeDetailPage() {
         e.preventDefault();
         if (!editingChar) return;
         setSaving(true);
+
         try {
+            const rootBooleans = ['is_hero', 'is_villain', 'is_protagonist', 'has_powers', 'uses_weapon', 'is_human'];
+            const dynamicAttributes = { ...editingChar.attributes };
+
+            detail?.schema.form.forEach((field: any) => {
+                if (field.type === 'boolean' && !rootBooleans.includes(field.key)) {
+                    dynamicAttributes[field.key] = editingChar[field.key] || false;
+                }
+            });
+
             const payload = {
                 is_hero: editingChar.is_hero || false,
                 is_villain: editingChar.is_villain || false,
@@ -95,11 +111,12 @@ export function ThemeDetailPage() {
                 uses_weapon: editingChar.uses_weapon || false,
                 is_human: editingChar.is_human || false,
                 attributes: {
-                    ...editingChar.attributes,
+                    ...dynamicAttributes,
                     species: editingChar.attributes?.species || null,
                     house: editingChar.attributes?.house || null,
                 }
             };
+
             await api.updateCharacter(editingChar.id, payload as any);
             setEditingChar(null);
             loadDetail();
@@ -124,6 +141,23 @@ export function ThemeDetailPage() {
         }
     };
 
+    const handleCreateQuestion = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!slug) return;
+        setSavingQuestion(true);
+        try {
+            await api.createQuestion(slug, newQuestionText, newQuestionAttr);
+            setShowAddQuestion(false);
+            setNewQuestionText('');
+            setNewQuestionAttr('');
+            loadDetail();
+        } catch (err) {
+            alert("Error: " + (err as Error).message);
+        } finally {
+            setSavingQuestion(false);
+        }
+    };
+
     if (loading) return <div className="min-h-screen bg-slate-950 flex items-center justify-center"><Spinner size="lg" text="Cargando temática..." /></div>;
     if (error) return <div className="p-8 text-red-400 text-center mt-10 font-bold">{error}</div>;
     if (!detail) return null;
@@ -135,6 +169,7 @@ export function ThemeDetailPage() {
         <div className="min-h-screen bg-slate-950 text-white p-4 sm:p-6">
             <div className="max-w-7xl mx-auto space-y-8">
 
+                {/* Header */}
                 <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 bg-slate-900 p-6 rounded-2xl border border-slate-800 shadow-xl">
                     <div className="flex-1">
                         <Link to="/" className="text-sm font-medium text-slate-400 hover:text-purple-400 mb-3 inline-block transition">← Volver al inicio</Link>
@@ -162,6 +197,7 @@ export function ThemeDetailPage() {
                     <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="🔍 Buscar personaje por nombre..." className="w-full bg-slate-900 border border-slate-700 rounded-xl px-5 py-4 text-white placeholder-slate-500 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 shadow-inner" />
                 </div>
 
+                {/* Galería */}
                 <section>
                     <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-6">
                         <h2 className="text-2xl font-bold text-slate-200">Galería de Personajes</h2>
@@ -177,6 +213,26 @@ export function ThemeDetailPage() {
                                 <div className="p-3">
                                     <div className="text-sm font-bold truncate group-hover:text-purple-400 transition-colors">{c.name}</div>
                                 </div>
+                            </div>
+                        ))}
+                    </div>
+                </section>
+
+                {/* Preguntas */}
+                <section>
+                    <div className="flex items-center justify-between border-b border-slate-800 pb-2 mb-4">
+                        <h2 className="text-2xl font-bold text-slate-200">Preguntas Disponibles</h2>
+                        <button
+                            onClick={() => setShowAddQuestion(true)}
+                            className="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-lg text-sm font-bold transition"
+                        >
+                            + Añadir Pregunta
+                        </button>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                        {questions.map((q) => (
+                            <div key={q.code} className="bg-slate-800 px-4 py-3 rounded-lg text-sm border border-slate-700">
+                                {q.text_es}
                             </div>
                         ))}
                     </div>
@@ -256,6 +312,48 @@ export function ThemeDetailPage() {
                             </button>
                         </div>
                     </div>
+                </div>
+            )}
+
+            {/* MODAL AÑADIR PREGUNTA */}
+            {showAddQuestion && (
+                <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
+                    <form onSubmit={handleCreateQuestion} className="bg-slate-900 rounded-2xl p-6 w-full max-w-md border border-emerald-900/50 shadow-2xl space-y-4">
+                        <h3 className="text-xl font-bold text-emerald-400">Nueva Pregunta</h3>
+                        <p className="text-sm text-slate-400">Esta pregunta aparecerá solo en esta temática.</p>
+
+                        <div>
+                            <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Texto de la pregunta</label>
+                            <input
+                                type="text"
+                                value={newQuestionText}
+                                onChange={(e) => setNewQuestionText(e.target.value)}
+                                placeholder="Ej: ¿Trabaja en Dunder Mifflin?"
+                                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-emerald-500 focus:outline-none"
+                                required
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Atributo técnico (sin espacios)</label>
+                            <input
+                                type="text"
+                                value={newQuestionAttr}
+                                onChange={(e) => setNewQuestionAttr(e.target.value.replace(/\s+/g, '_').toLowerCase())}
+                                placeholder="Ej: works_dunder_mifflin"
+                                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-emerald-500 focus:outline-none"
+                                required
+                            />
+                            <p className="text-[10px] text-slate-500 mt-1">Se usará para evaluar si el personaje cumple la condición.</p>
+                        </div>
+
+                        <div className="flex gap-3 justify-end pt-2">
+                            <button type="button" onClick={() => setShowAddQuestion(false)} className="px-4 py-2 rounded-lg text-slate-300 hover:bg-slate-800 transition">Cancelar</button>
+                            <button type="submit" disabled={savingQuestion} className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 font-bold disabled:opacity-50 transition">
+                                {savingQuestion ? 'Creando...' : 'Crear Pregunta'}
+                            </button>
+                        </div>
+                    </form>
                 </div>
             )}
         </div>

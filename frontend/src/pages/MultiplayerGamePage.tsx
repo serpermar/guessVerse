@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { socket } from '../lib/socket';
 import { useAuth } from '../features/auth/AuthProvider';
 import { api, type CharacterCard, type QuestionDto } from '../services/api';
@@ -21,83 +21,120 @@ export function MultiplayerGamePage() {
     const [guessMode, setGuessMode] = useState(false);
     const [confirmCard, setConfirmCard] = useState<CharacterCard | null>(null);
 
+    // Estados de conectividad
+    const [opponentDisconnected, setOpponentDisconnected] = useState(false);
+    const [showAbandonConfirm, setShowAbandonConfirm] = useState(false);
+
+    const [askedQuestions, setAskedQuestions] = useState<Set<string>>(new Set());
+
     useEffect(() => {
         if (!user || !gameId) return;
 
         socket.connect();
 
-        // 1. Cargar estado inicial
-        socket.emit('request_game_state', { gameId, userId: user.id }, async (res: any) => {
-            if (res.success) {
-                setBoard(res.board);
-                setSecret(res.secret);
-                setIsMyTurn(res.isMyTurn);
-                if (res.eliminatedIds) setEliminated(new Set(res.eliminatedIds));
-
-                if (res.themeSlug) {
-                    const qs = await api.questions(res.themeSlug);
-                    setQuestions(qs);
+        const fetchState = () => {
+            socket.emit('request_game_state', { gameId, userId: user.id }, async (res: any) => {
+                if (res.success) {
+                    setBoard(res.board);
+                    setSecret(res.secret);
+                    setIsMyTurn(res.isMyTurn);
+                    setOpponentDisconnected(false);
+                    if (res.eliminatedIds) setEliminated(new Set(res.eliminatedIds));
+                    if (res.themeSlug) {
+                        const qs = await api.questions(res.themeSlug);
+                        setQuestions(qs);
+                    }
+                } else {
+                    nav('/');
                 }
-            }
+            });
+        };
+
+        fetchState();
+
+        socket.on('connect', () => {
+            fetchState();
         });
 
-        // 2. Escuchar resultados de mis preguntas
         socket.on('question_result', (data: { questionText: string, answer: string, matchedIds: string[] }) => {
             setLogs(prev => [...prev, { text: data.questionText, answer: data.answer }]);
-
             setEliminated(prev => {
                 const newSet = new Set(prev);
                 data.matchedIds.forEach(id => newSet.add(id));
                 return newSet;
             });
-
-            setIsMyTurn(false); // Ahora es el turno del rival
+            setIsMyTurn(false);
         });
 
-        // 3. Escuchar cuando el rival pregunta
         socket.on('opponent_asked', (data: { askerId: string, questionText: string, answer: string }) => {
             if (data.askerId === user.id) return;
-
             setLogs(prev => [...prev, { text: `Rival: ${data.questionText}`, answer: data.answer }]);
-            setIsMyTurn(true); // Ahora es mi turno
+            setIsMyTurn(true);
         });
 
-        // 4. Fin de la partida
         socket.on('game_over', (data: { winnerId: string }) => {
             setWinnerId(data.winnerId);
+            setConfirmCard(null);       // Cierra el modal de adivinar si estaba abierto
+            setGuessMode(false);        // Desactiva el modo adivinar
+            setOpponentDisconnected(false);
         });
 
-        // 5. Fallo al adivinar
         socket.on('wrong_guess', () => {
             alert("¡Fallo! Ese no era el personaje secreto.");
             setConfirmCard(null);
             setGuessMode(false);
-            setIsMyTurn(false); // Pierdo el turno
+            setIsMyTurn(false);
+        });
+
+        socket.on('opponent_disconnected', () => {
+            setOpponentDisconnected(true);
+        });
+
+        socket.on('opponent_reconnected', () => {
+            setOpponentDisconnected(false);
         });
 
         return () => {
+            socket.off('connect');
             socket.off('question_result');
             socket.off('opponent_asked');
             socket.off('game_over');
             socket.off('wrong_guess');
+            socket.off('opponent_disconnected');
+            socket.off('opponent_reconnected');
         };
-    }, [user, gameId]);
+    }, [user, gameId, nav]);
 
     const askQuestion = (code: string, text: string) => {
-        if (!isMyTurn) return;
-        setIsMyTurn(false); // Bloqueo instantáneo visual
+        if (!isMyTurn || opponentDisconnected || winnerId) return;
+        if (askedQuestions.has(code)) {
+            alert("Ya has hecho esa pregunta antes.");
+            return;
+        }
 
+        setIsMyTurn(false);
         socket.emit('ask_question', { gameId, userId: user?.id, questionCode: code, questionText: text }, (res: any) => {
             if (!res.success) {
                 alert(res.error);
-                setIsMyTurn(true); // Si falla, recupero el turno
+                setIsMyTurn(true);
+            } else {
+                setAskedQuestions(prev => new Set(prev).add(code));
             }
         });
     };
 
     const makeGuess = () => {
-        if (!confirmCard) return;
-        socket.emit('make_guess', { gameId, userId: user?.id, characterId: confirmCard.id });
+        if (!confirmCard || opponentDisconnected || winnerId) return;
+        socket.emit('make_guess', { gameId, userId: user?.id, characterId: confirmCard.id }, (res: any) => {
+            if (!res.success) {
+                alert(res.error);
+            }
+        });
+    };
+
+    const handleAbandon = () => {
+        socket.emit('abandon_game', { gameId, userId: user?.id });
+        nav('/');
     };
 
     if (!user) return null;
@@ -106,34 +143,44 @@ export function MultiplayerGamePage() {
         <div className="min-h-screen bg-slate-950 text-white p-4 sm:p-6">
             <div className="max-w-7xl mx-auto space-y-6">
 
+                {/* Banner de Rival Desconectado */}
+                {opponentDisconnected && !winnerId && (
+                    <div className="bg-yellow-900/80 border border-yellow-500 text-yellow-100 p-3 rounded-xl text-center font-bold animate-pulse">
+                        ⏳ El rival se ha desconectado. Esperando reconexión (30s)...
+                    </div>
+                )}
+
                 {/* Header */}
                 <div className="flex items-center justify-between bg-slate-900 p-4 rounded-xl border border-slate-800">
                     <div>
                         <h1 className="text-xl font-bold">Multijugador</h1>
-                        <p className={`text-sm font-bold ${isMyTurn ? 'text-emerald-400' : 'text-slate-500'}`}>
-                            {isMyTurn ? '🟢 Es tu turno' : '⏳ Esperando al rival...'}
+                        <p className={`text-sm font-bold ${winnerId ? 'text-slate-400' :
+                                (isMyTurn && !opponentDisconnected ? 'text-emerald-400' : 'text-slate-500')
+                            }`}>
+                            {winnerId ? 'Partida finalizada' :
+                                (opponentDisconnected ? '⏸️ Partida en pausa' :
+                                    (isMyTurn ? '🟢 Es tu turno' : '⏳ Esperando al rival...'))}
                         </p>
                     </div>
-                    <Link to="/" className="bg-slate-800 hover:bg-slate-700 px-4 py-2 rounded-lg text-sm">Salir</Link>
+
+                    <button
+                        onClick={() => winnerId ? nav('/') : setShowAbandonConfirm(true)}
+                        className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2 rounded-lg text-sm transition"
+                    >
+                        {winnerId ? 'Volver al inicio' : 'Abandonar'}
+                    </button>
                 </div>
 
-                {/* Fin de partida */}
-                {winnerId && (
-                    <div className={`p-6 rounded-xl text-center border-2 ${winnerId === user.id ? 'bg-emerald-900/50 border-emerald-500' : 'bg-red-900/50 border-red-500'}`}>
-                        <h2 className="text-3xl font-black mb-2">{winnerId === user.id ? '🏆 ¡Has Ganado!' : '💀 Has Perdido'}</h2>
-                        <button onClick={() => nav('/')} className="bg-white text-slate-900 px-6 py-2 rounded-lg font-bold mt-4">Volver al inicio</button>
-                    </div>
-                )}
-
                 <div className="grid lg:grid-cols-[1fr_320px] gap-6">
-
                     {/* Tablero */}
                     <div>
                         <div className="mb-4 flex gap-2">
-                            {!guessMode ? (
-                                <button onClick={() => setGuessMode(true)} disabled={!isMyTurn || !!winnerId} className="bg-pink-600 hover:bg-pink-500 disabled:opacity-50 px-4 py-2 rounded-lg font-bold text-sm">🎯 Adivinar</button>
-                            ) : (
-                                <button onClick={() => setGuessMode(false)} className="bg-slate-700 px-4 py-2 rounded-lg text-sm">Cancelar</button>
+                            {!winnerId && (
+                                !guessMode ? (
+                                    <button onClick={() => setGuessMode(true)} disabled={!isMyTurn || opponentDisconnected} className="bg-pink-600 hover:bg-pink-500 disabled:opacity-50 px-4 py-2 rounded-lg font-bold text-sm">🎯 Adivinar</button>
+                                ) : (
+                                    <button onClick={() => setGuessMode(false)} className="bg-slate-700 px-4 py-2 rounded-lg text-sm">Cancelar</button>
+                                )
                             )}
                         </div>
                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
@@ -143,6 +190,7 @@ export function MultiplayerGamePage() {
                                     <button
                                         key={c.id}
                                         onClick={() => {
+                                            if (winnerId) return;
                                             if (guessMode) setConfirmCard(c);
                                             else {
                                                 const newSet = new Set(eliminated);
@@ -152,7 +200,7 @@ export function MultiplayerGamePage() {
                                             }
                                         }}
                                         className={`relative aspect-[3/4] rounded-xl overflow-hidden transition-all border-2 ${dead ? 'opacity-30 grayscale border-slate-800' : 'border-slate-700 hover:border-purple-500'
-                                            } ${guessMode && !dead ? 'ring-2 ring-pink-500' : ''}`}
+                                            } ${guessMode && !dead ? 'ring-2 ring-pink-500' : ''} ${winnerId ? 'cursor-default' : ''}`}
                                     >
                                         {c.image_url ? (
                                             <img src={c.image_url} alt={c.name} className="w-full h-full object-cover" />
@@ -179,16 +227,19 @@ export function MultiplayerGamePage() {
                         <div>
                             <h3 className="text-sm uppercase text-slate-400 mb-2">Hacer Pregunta</h3>
                             <div className="grid grid-cols-2 gap-1 max-h-60 overflow-y-auto pr-1">
-                                {questions.map((q) => (
-                                    <button
-                                        key={q.code}
-                                        onClick={() => askQuestion(q.code, q.text_es)}
-                                        disabled={!isMyTurn || !!winnerId}
-                                        className="text-xs bg-slate-800 hover:bg-slate-700 disabled:opacity-40 p-2 rounded text-left"
-                                    >
-                                        {q.text_es}
-                                    </button>
-                                ))}
+                                {questions.map((q) => {
+                                    const alreadyAsked = askedQuestions.has(q.code);
+                                    return (
+                                        <button
+                                            key={q.code}
+                                            onClick={() => askQuestion(q.code, q.text_es)}
+                                            disabled={!isMyTurn || !!winnerId || opponentDisconnected || alreadyAsked}
+                                            className={`text-xs p-2 rounded text-left ${alreadyAsked ? 'bg-slate-900 text-slate-600' : 'bg-slate-800 hover:bg-slate-700'}`}
+                                        >
+                                            {q.text_es} {alreadyAsked && '✓'}
+                                        </button>
+                                    );
+                                })}
                             </div>
                         </div>
 
@@ -199,7 +250,7 @@ export function MultiplayerGamePage() {
                                     <li key={i} className="bg-slate-800 p-2 rounded border border-slate-700">
                                         <div className="text-slate-300 text-xs">{l.text}</div>
                                         <div className={`font-bold text-right text-xs mt-1 ${l.answer === 'yes' ? 'text-emerald-400' :
-                                                l.answer === 'no' ? 'text-red-400' : 'text-slate-500'
+                                            l.answer === 'no' ? 'text-red-400' : 'text-slate-500'
                                             }`}>
                                             {l.answer === 'yes' ? 'SÍ' : l.answer === 'no' ? 'NO' : 'DESCONOCIDO'}
                                         </div>
@@ -211,15 +262,60 @@ export function MultiplayerGamePage() {
                 </div>
             </div>
 
-            {/* Modal Confirmar Adivinación */}
-            {confirmCard && (
+            {/* MODAL FIN DE PARTIDA (Nuevo y llamativo) */}
+            {winnerId && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fade-in">
+                    <div className={`w-full max-w-md p-8 rounded-3xl border-2 text-center shadow-2xl transform transition-all animate-pop-in ${winnerId === user.id
+                            ? 'bg-gradient-to-br from-emerald-900 to-emerald-950 border-emerald-500/50 shadow-emerald-900/50'
+                            : 'bg-gradient-to-br from-red-900 to-red-950 border-red-500/50 shadow-red-900/50'
+                        }`}>
+                        <div className="text-7xl mb-6 animate-bounce">
+                            {winnerId === user.id ? '🏆' : '💀'}
+                        </div>
+                        <h2 className="text-4xl font-black mb-4 tracking-tight">
+                            {winnerId === user.id ? '¡VICTORIA!' : 'DERROTA'}
+                        </h2>
+                        <p className="text-lg text-white/80 mb-8 font-medium">
+                            {winnerId === user.id
+                                ? 'Has adivinado el personaje secreto de tu rival.'
+                                : 'Tu rival ha adivinado tu personaje secreto.'}
+                        </p>
+                        <button
+                            onClick={() => nav('/')}
+                            className={`w-full py-4 rounded-xl font-bold text-lg transition-transform hover:scale-105 ${winnerId === user.id
+                                    ? 'bg-white text-emerald-900 shadow-lg shadow-black/20'
+                                    : 'bg-slate-800 text-white border border-slate-700 hover:bg-slate-700'
+                                }`}
+                        >
+                            Volver al inicio
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal Abandonar */}
+            {showAbandonConfirm && (
                 <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
-                    <div className="bg-slate-900 rounded-2xl p-6 max-w-sm w-full text-center border border-slate-700">
+                    <div className="bg-slate-900 rounded-2xl p-6 max-w-sm w-full text-center border border-red-900/50 shadow-xl">
+                        <h3 className="text-xl font-bold text-red-400 mb-2">¿Abandonar partida?</h3>
+                        <p className="text-slate-400 text-sm mb-6">Si sales ahora, el rival será declarado ganador.</p>
+                        <div className="flex gap-3 justify-center">
+                            <button onClick={() => setShowAbandonConfirm(false)} className="bg-slate-700 hover:bg-slate-600 px-4 py-2 rounded-lg transition">Cancelar</button>
+                            <button onClick={handleAbandon} className="bg-red-600 hover:bg-red-500 px-4 py-2 rounded-lg font-bold text-white transition">Sí, abandonar</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal Confirmar Adivinación */}
+            {confirmCard && !winnerId && (
+                <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
+                    <div className="bg-slate-900 rounded-2xl p-6 max-w-sm w-full text-center border border-slate-700 shadow-xl">
                         <h3 className="text-xl font-bold mb-2">¿Es {confirmCard.name}?</h3>
                         <p className="text-slate-400 text-sm mb-6">Si fallas, pierdes el turno.</p>
                         <div className="flex gap-3 justify-center">
-                            <button onClick={() => setConfirmCard(null)} className="bg-slate-700 px-4 py-2 rounded-lg">Cancelar</button>
-                            <button onClick={makeGuess} className="bg-pink-600 hover:bg-pink-500 px-4 py-2 rounded-lg font-bold">Adivinar</button>
+                            <button onClick={() => setConfirmCard(null)} className="bg-slate-700 hover:bg-slate-600 px-4 py-2 rounded-lg transition">Cancelar</button>
+                            <button onClick={makeGuess} className="bg-pink-600 hover:bg-pink-500 px-4 py-2 rounded-lg font-bold shadow-lg shadow-pink-900/30 transition">Adivinar</button>
                         </div>
                     </div>
                 </div>

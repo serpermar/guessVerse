@@ -1,5 +1,5 @@
 import { supabaseAdmin } from '../db/supabase.js';
-import { findQuestionsByCategories, type QuestionDto } from '../repositories/questions.repository.js';
+import { findQuestionsByCategories, findCustomQuestionsByThemeId, type QuestionDto } from '../repositories/questions.repository.js';
 import { findCharactersByThemeId } from '../repositories/themes.repository.js';
 
 export async function getQuestionsForTheme(themeSlug: string): Promise<QuestionDto[]> {
@@ -13,11 +13,13 @@ export async function getQuestionsForTheme(themeSlug: string): Promise<QuestionD
     if (error || !theme) throw new Error(`Theme "${themeSlug}" no encontrado`);
 
     const cats = (theme.question_categories ?? []) as string[];
-    const baseQuestions = await findQuestionsByCategories(cats);
 
-    const characters = await findCharactersByThemeId(theme.id);
+    const [baseQuestions, customQuestions, characters] = await Promise.all([
+        findQuestionsByCategories(cats),
+        findCustomQuestionsByThemeId(theme.id),
+        findCharactersByThemeId(theme.id)
+    ]);
 
-    // LEER TANTO DE 'attributes' COMO DE LA COLUMNA ANTIGUA 'species'
     const uniqueSpecies = new Set(
         characters
             .map((c) => {
@@ -34,5 +36,10 @@ export async function getQuestionsForTheme(themeSlug: string): Promise<QuestionD
         category: 'dynamic',
     }));
 
-    return [...baseQuestions, ...dynamicQuestions];
+    const allQuestions = [...baseQuestions, ...customQuestions, ...dynamicQuestions];
+
+    // CORRECCIÓN: Unificar por texto para eliminar duplicados
+    const uniqueQuestions = Array.from(new Map(allQuestions.map(q => [q.text_es, q])).values());
+
+    return uniqueQuestions;
 }

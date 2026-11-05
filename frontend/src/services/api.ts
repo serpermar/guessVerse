@@ -186,4 +186,10 @@ export const api = {
 
     deleteTheme: (slug: string) =>
         req<{ ok: boolean }>(`/api/themes/${slug}`, { method: 'DELETE' }),
+
+    createQuestion: (themeSlug: string, textEs: string, attribute: string) =>
+        req<{ data: QuestionDto }>(`/api/themes/${themeSlug}/questions`, {
+            method: 'POST',
+            body: JSON.stringify({ textEs, attribute }),
+        }).then(r => r.data),
 };

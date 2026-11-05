@@ -31,3 +31,36 @@ export async function findQuestionsByCategories(categories: string[]): Promise<Q
     if (error) throw new Error(`Error listando preguntas: ${error.message}`);
     return data ?? [];
 }
+
+export async function createCustomQuestion(themeId: string, code: string, textEs: string, attribute: string) {
+    const { data, error } = await supabaseAdmin
+        .from('questions')
+        .insert({
+            theme_id: themeId,
+            code: code,
+            text_es: textEs,
+            attribute: attribute,
+            operator: 'eq',
+            value: { v: true },
+            category: 'custom',
+            is_active: true
+        })
+        .select('*')
+        .single();
+    if (error) throw new Error(`Error creando pregunta: ${error.message}`);
+    return data;
+}
+
+// Añadir al final del archivo
+
+export async function findCustomQuestionsByThemeId(themeId: string): Promise<QuestionDto[]> {
+    const { data, error } = await supabaseAdmin
+        .from('questions')
+        .select('id, code, text_es, category, attribute, operator, value')
+        .eq('theme_id', themeId)
+        .eq('is_active', true)
+        .order('code');
+
+    if (error) throw new Error(`Error listando preguntas custom: ${error.message}`);
+    return data ?? [];
+}

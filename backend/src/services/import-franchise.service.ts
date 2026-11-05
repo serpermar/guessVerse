@@ -3,11 +3,10 @@ import { DiscoveredFranchise } from './discover.service.js';
 import { tmdbFetch } from '../integrations/tmdb/client.js';
 import { getWikipediaImage } from '../integrations/wikipedia/client.js';
 import { getFandomImage } from '../integrations/fandom/client.js';
-import { classifyWithWikidata, getWikidataImage } from '../integrations/wikidata/client.js'; // <-- Importamos getWikidataImage
+import { classifyWithWikidata } from '../integrations/wikidata/client.js';
 import { supabaseAdmin } from '../db/supabase.js';
 import { slugify } from '../utils/text.js';
 
-// Añadimos dominios específicos para series animadas y sagas conocidas
 const FANDOM_DOMAINS: Record<string, string> = {
     'the-lord-of-the-rings-collection': 'lotr.fandom.com',
     'the-matrix-collection': 'matrix.fandom.com',
@@ -15,9 +14,6 @@ const FANDOM_DOMAINS: Record<string, string> = {
     'alien-collection': 'alien.fandom.com',
     'one-piece-collection': 'onepiece.fandom.com',
     'pirates-of-the-caribbean-collection': 'pirates.fandom.com',
-    'batman-the-animated-series': 'batman.fandom.com', // <-- NUEVO
-    'stranger-things': 'strangerthings.fandom.com',    // <-- NUEVO
-    'breaking-bad': 'breakingbad.fandom.com',          // <-- NUEVO
 };
 
 const SPECIES_TRANSLATION: Record<string, string> = {
@@ -31,6 +27,29 @@ function translateSpecies(raw: string | null): string | null {
     if (!raw) return null;
     const clean = raw.toLowerCase().trim();
     return SPECIES_TRANSLATION[clean] || clean;
+}
+
+// NUEVO: Adivinar especie por el nombre de la franquicia
+function guessSpeciesFromFranchise(franchiseName: string): string | null {
+    const lower = franchiseName.toLowerCase();
+    if (lower.includes('pirata') || lower.includes('pirates')) return 'pirata';
+    if (lower.includes('star wars')) return 'alienígena';
+    if (lower.includes('harry potter')) return 'mago';
+    if (lower.includes('one piece')) return 'pirata';
+    if (lower.includes('alien')) return 'alienígena';
+    return null;
+}
+
+// NUEVO: Adivinar especie/rol por el nombre del personaje
+function guessSpeciesFromName(name: string): string | null {
+    const lower = name.toLowerCase();
+    if (lower.includes('captain') || lower.includes('capitán')) return 'capitán';
+    if (lower.includes('king') || lower.includes('rey')) return 'rey';
+    if (lower.includes('queen') || lower.includes('reina')) return 'reina';
+    if (lower.includes('prince') || lower.includes('príncipe')) return 'príncipe';
+    if (lower.includes('princess') || lower.includes('princesa')) return 'princesa';
+    if (lower.includes('doctor') || lower.includes('dr.')) return 'científico';
+    return null;
 }
 
 async function guessFandomDomain(franchiseName: string): Promise<string | null> {
@@ -102,6 +121,7 @@ async function importTmdb(franchise: DiscoveredFranchise) {
 
     const uniqueSlugs = new Set<string>();
     const pendingChars: PendingCharacter[] = [];
+    const franchiseDefaultSpecies = guessSpeciesFromFranchise(franchise.name);
 
     console.log(`📥 Recolectando personajes de ${parts.length} elementos...`);
 
@@ -129,27 +149,14 @@ async function importTmdb(franchise: DiscoveredFranchise) {
                 if (existing?.image_url) {
                     imageUrl = existing.image_url;
                 } else {
-                    // --- CASCADA DE IMÁGENES ---
-                    console.log(`🔍 Buscando imagen para: ${name}`);
-
-                    // 1. Wikidata (P18)
-                    imageUrl = await getWikidataImage(name);
-                    if (imageUrl) console.log(`  ✅ Wikidata: ${imageUrl}`);
-
-                    // 2. Fandom (si tenemos el dominio)
-                    if (!imageUrl && fandomDomain) {
-                        imageUrl = await getFandomImage(fandomDomain, name);
-                        if (imageUrl) console.log(`  ✅ Fandom: ${imageUrl}`);
+                    if (fandomDomain) {
+                        const fandomImg = await getFandomImage(fandomDomain, name);
+                        if (fandomImg) imageUrl = fandomImg;
                     }
-
-                    // 3. Wikipedia (Fallback general)
                     if (!imageUrl) {
-                        imageUrl = await getWikipediaImage(name);
-                        if (imageUrl) console.log(`  ✅ Wikipedia: ${imageUrl}`);
+                        const wikiImg = await getWikipediaImage(name);
+                        if (wikiImg) imageUrl = wikiImg;
                     }
-
-                    // Si todo falla, imageUrl se queda null y el frontend pinta las iniciales.
-                    if (!imageUrl) console.log(`  ❌ Sin imagen. Usando iniciales.`);
                 }
 
                 pendingChars.push({ cast, name, slug: charSlug, imageUrl, movieTitle: part.title });
@@ -169,10 +176,23 @@ async function importTmdb(franchise: DiscoveredFranchise) {
             species = translateSpecies(wikiData.species);
         } else {
             const lowerName = char.name.toLowerCase();
-            if (lowerName.includes('darth') || lowerName.includes('lord') || lowerName.includes('dark') || lowerName.includes('evil') || lowerName.includes('jones')) role = 'villain';
-            else if (lowerName.includes('captain') || lowerName.includes('king') || lowerName.includes('queen')) { role = 'neutral'; species = 'realeza'; }
-            else if (char.cast.order < 3) role = 'hero';
+            if (lowerName.includes('darth') || lowerName.includes('lord') || lowerName.includes('dark') || lowerName.includes('evil') || lowerName.includes('jones')) {
+                role = 'villain';
+            } else if (char.cast.order < 3) {
+                role = 'hero';
+            }
         }
+
+        // Si después de Wikidata no hay especie, usamos heurísticas
+        if (!species) {
+            species = guessSpeciesFromName(char.name) || franchiseDefaultSpecies;
+        }
+
+        // Si aún así no hay especie, y parece humano por defecto
+        if (!species && char.cast.order < 3) {
+            species = 'humano';
+        }
+
         return { role, species };
     });
 
@@ -201,7 +221,6 @@ async function importTmdb(franchise: DiscoveredFranchise) {
 }
 
 async function importAniList(franchise: DiscoveredFranchise) {
-    // ... (se mantiene igual)
     const themeSlug = slugify(franchise.name);
 
     const { data: theme, error: themeErr } = await supabaseAdmin
@@ -244,11 +263,15 @@ async function importAniList(franchise: DiscoveredFranchise) {
 
         const isMain = edge.role === 'MAIN';
 
+        // Para anime, asignamos una especie genérica basada en la franquicia o "humano"
+        let species = guessSpeciesFromFranchise(franchise.name);
+        if (!species && isMain) species = 'humano';
+
         await supabaseAdmin.from('characters').upsert({
             franchise_id: fran.id, slug: charSlug, name: name,
             gender: 'unknown', image_url: charNode.image.large,
             is_hero: isMain, is_villain: false, is_protagonist: isMain,
-            has_powers: true, attributes: { species: null }
+            has_powers: true, attributes: { species }
         }, { onConflict: 'franchise_id,slug' });
     }
     return { themeSlug, charactersCount: uniqueSlugs.size };
