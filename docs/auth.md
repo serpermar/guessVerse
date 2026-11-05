@@ -1,30 +1,30 @@
-# Autenticación — GuessVerse
+# 🔐 Autenticación — GuessVerse
 
 Documento de referencia del flujo de autenticación implementado en el Bloque 1.
 
 ---
 
-## 1. Visión general
+## 1. 🧭 Visión general
 
-- **Proveedor:** Supabase Auth (email + password).
-- **Verificación:** email obligatorio para activar la cuenta.
-- **Usuario:** `public.users` vinculado 1:1 con `auth.users` vía trigger.
-- **Sesión:** JWT gestionado por `@supabase/supabase-js` en el frontend y verificado en el backend mediante `supabaseAdmin.auth.getUser()`.
+- 🔑 **Proveedor:** Supabase Auth (email + password).
+- 📧 **Verificación:** email obligatorio para activar la cuenta.
+- 👤 **Usuario:** `public.users` vinculado 1:1 con `auth.users` vía trigger.
+- 🎫 **Sesión:** JWT gestionado por `@supabase/supabase-js` en el frontend y verificado en el backend mediante `supabaseAdmin.auth.getUser()`.
 
 ---
 
-## 2. Configuración en Supabase (checklist)
+## 2. ⚙️ Configuración en Supabase (checklist)
 
-### Authentication → Providers → Email
+### 📧 Authentication → Providers → Email
 - [x] **Confirm email** activo.
 
-### Authentication → URL Configuration
+### 🔗 Authentication → URL Configuration
 - [x] **Site URL:** `http://localhost:5173` (en producción será el dominio).
 - [x] **Redirect URLs:**
   - `http://localhost:5173/auth/callback`
   - `http://localhost:5173/**`
 
-### Authentication → Email Templates → Confirm sign up
+### ✉️ Authentication → Email Templates → Confirm sign up
 - [x] Enlace:
 
 ```html
@@ -37,7 +37,7 @@ Documento de referencia del flujo de autenticación implementado en el Bloque 1.
 
 ---
 
-## 3. Flujo de registro
+## 3. 📝 Flujo de registro
 
 ```text
 [RegisterPage]
@@ -63,7 +63,7 @@ Documento de referencia del flujo de autenticación implementado en el Bloque 1.
 
 ---
 
-## 4. Flujo de login
+## 4. 🔑 Flujo de login
 
 ```text
 [LoginPage]
@@ -78,7 +78,7 @@ Documento de referencia del flujo de autenticación implementado en el Bloque 1.
 
 ---
 
-## 5. Flujo de logout
+## 5. 🚪 Flujo de logout
 
 ```text
 [ProfilePage / AppHeader]
@@ -91,7 +91,7 @@ Documento de referencia del flujo de autenticación implementado en el Bloque 1.
 
 ---
 
-## 6. Trigger `handle_new_user`
+## 6. 🧬 Trigger `handle_new_user`
 
 SQL aplicado en Supabase:
 
@@ -129,17 +129,17 @@ $$;
 ```
 
 **Comportamiento:**
-- Lee `username` del metadata si existe.
-- Fallback a la parte local del email (`user@x.com` → `user`).
-- Sanea: minúsculas, sin símbolos, máximo 20 caracteres.
-- Fallback adicional `user_<id>` si el saneado deja menos de 3 caracteres.
-- Resuelve colisiones: `username`, `username_1`, `username_2`, etc.
+- 📥 Lee `username` del metadata si existe.
+- 🔁 Fallback a la parte local del email (`user@x.com` → `user`).
+- 🧼 Sanea: minúsculas, sin símbolos, máximo 20 caracteres.
+- 🆔 Fallback adicional `user_<id>` si el saneado deja menos de 3 caracteres.
+- 🔢 Resuelve colisiones: `username`, `username_1`, `username_2`, etc.
 
 ---
 
-## 7. Backend — middleware
+## 7. 🛡️ Backend — middleware
 
-### `auth.middleware.ts`
+### 🧩 `auth.middleware.ts`
 
 ```ts
 requireAuth(req, res, next) // 401 si falta o es inválido; adjunta req.user
@@ -155,7 +155,7 @@ const { data: { user }, error } =
 
 `supabaseAdmin.auth.getUser(jwt)` valida el token y devuelve el usuario. No hace falta verificar el JWT manualmente.
 
-### `types/express.d.ts`
+### 📘 `types/express.d.ts`
 
 ```ts
 declare global {
@@ -165,7 +165,7 @@ declare global {
 }
 ```
 
-### Aplicación por ruta
+### 🛣️ Aplicación por ruta
 
 ```ts
 // Protección de todo un router
@@ -177,7 +177,7 @@ router.post('/', requireAuth, postCreateGame);
 
 ---
 
-## 8. Endpoints de usuario
+## 8. 🔌 Endpoints de usuario
 
 | Método | Ruta | Descripción |
 |---|---|---|
@@ -188,7 +188,7 @@ router.post('/', requireAuth, postCreateGame);
 
 ---
 
-## 9. Ownership de partidas
+## 9. 🎮 Ownership de partidas
 
 `game.service.ts` valida la propiedad en `askQuestion`, `guessCharacter`, `abandonGame` y `getGame`:
 
@@ -202,43 +202,43 @@ Respuesta: `403 Forbidden`.
 
 ---
 
-## 10. Asociación de partidas al usuario
+## 10. 🤝 Asociación de partidas al usuario
 
 Al crear partida:
-- `games.created_by = userId`
-- `game_players` → fila con `user_id`, `role = 'host'`
+- 🎲 `games.created_by = userId`
+- 🧑‍🤝‍🧑 `game_players` → fila con `user_id`, `role = 'host'`
 
 Al ganar:
-- `games.status = 'won'`, `winner_user_id = userId`, `finished_at = now()`
-- `statistics` → `recordGameResult(userId, 'won', questions, duration)`
+- 🏆 `games.status = 'won'`, `winner_user_id = userId`, `finished_at = now()`
+- 📈 `statistics` → `recordGameResult(userId, 'won', questions, duration)`
 
 Al abandonar:
-- `games.status = 'lost'`, `finished_at = now()`
-- `statistics` → `recordGameResult(userId, 'abandoned', questions, duration)`
+- 🏳️ `games.status = 'lost'`, `finished_at = now()`
+- 📉 `statistics` → `recordGameResult(userId, 'abandoned', questions, duration)`
 
 ---
 
-## 11. Estadísticas
+## 11. 📊 Estadísticas
 
 `recordGameResult` actualiza:
-- `games_played` +1
-- `games_won` / `games_lost` / `games_abandoned` según el estado
-- `questions_asked` + N
-- `avg_duration_seconds` (media incremental)
-- `win_rate`, calculado en `getStats()`
+- 🔢 `games_played` +1
+- 🏆 `games_won` / `games_lost` / `games_abandoned` según el estado
+- ❓ `questions_asked` + N
+- ⏱️ `avg_duration_seconds` (media incremental)
+- 📊 `win_rate`, calculado en `getStats()`
 
 ---
 
-## 12. Seguridad
+## 12. 🔒 Seguridad
 
-- `anon` (publishable) → frontend.
-- `service_role` → backend, **nunca** frontend.
-- `verifyOtp` solo funciona con `token_hash` + `type` válidos.
-- Rotar claves comprometidas antes de exponer el registro a usuarios reales.
+- 🔑 `anon` (publishable) → frontend.
+- 🛡️ `service_role` → backend, **nunca** frontend.
+- 🔍 `verifyOtp` solo funciona con `token_hash` + `type` válidos.
+- 🔄 Rotar claves comprometidas antes de exponer el registro a usuarios reales.
 
 ---
 
-## 13. Testing manual (checklist)
+## 13. ✅ Testing manual (checklist)
 
 - [ ] Registro con username → llega el email.
 - [ ] Clic en el enlace → redirige a `/profile`.
