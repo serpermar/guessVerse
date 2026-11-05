@@ -1,18 +1,34 @@
-# GuessVerse
+# 🎯 GuessVerse
 
 Juego web de deducción inspirado en **¿Quién es quién?**, en el que puedes descubrir personajes de la cultura popular mediante preguntas y pistas.
 
-## Tecnologías
+- 🎭 **5 temáticas base:** Marvel, Star Wars, Pokémon, Harry Potter y DC Comics.
+- 🕹️ **Modo individual:** elige una temática y haz preguntas para adivinar el personaje secreto.
+- 👥 **Multijugador 1v1:** salas privadas por código, turnos alternos y preguntas en tiempo real.
+- 🧲 **Importador dinámico:** busca franquicias en TMDB (películas y series) y AniList (anime).
+- ✏️ **Preguntas personalizadas:** crea nuevas preguntas desde la interfaz.
+- 🔐 **Autenticación:** registro, login y confirmación por email con Supabase.
 
-- **Frontend:** React 19, TypeScript, Vite, Tailwind CSS v4, Zustand y Supabase JS.
-- **Backend:** Node.js, Express 5 y TypeScript.
-- **Base de datos:** PostgreSQL mediante Supabase.
-- **Autenticación:** Supabase Auth (email + password + verificación).
-- **Fuentes de datos:** TMDB (Marvel MCU, Star Wars Skywalker Saga), PokeAPI (Pokémon), SuperHero API/akabab (Marvel/DC/Star Wars), HP-API (Harry Potter).
+> ✅ **Estado:** Bloques 1, 2 y 3 completados.  
+> ⏳ **Pendiente:** despliegue a producción y funcionalidades avanzadas de IA.  
+> 📚 Ver [`docs/PROJECT_STATE.md`](docs/PROJECT_STATE.md) para el detalle completo.
 
-> Socket.IO está planificado pero **aún no implementado**.
+---
 
-## Requisitos previos
+## 🧰 Tecnologías
+
+- **🎨 Frontend:** React 19, TypeScript, Vite 8, Tailwind CSS v4, React Router 7, Zustand 5, Supabase JS y Socket.IO Client.
+- **⚙️ Backend:** Node.js, Express 5, TypeScript, Socket.IO, `zod`, `helmet` y `express-rate-limit`.
+- **🗄️ Base de datos:** PostgreSQL mediante Supabase (RLS y triggers).
+- **🔐 Autenticación:** Supabase Auth (email + password + verificación).
+- **🧪 Testing:** Vitest en el backend.
+- **🌐 Fuentes de datos:** TMDB, AniList, PokeAPI, SuperHero API (akabab), akabab/starwars-api, HP-API, Wikidata, Wikipedia y Fandom.
+
+---
+
+## 🚀 Puesta en marcha
+
+### 📋 Requisitos previos
 
 Antes de instalar el proyecto, asegúrate de tener:
 
@@ -22,11 +38,9 @@ Antes de instalar el proyecto, asegúrate de tener:
 - Un proyecto en [Supabase](https://supabase.com/) con Auth y las tablas del esquema.
 - Credenciales de API de [TMDB](https://www.themoviedb.org/settings/api).
 
-**No necesitas Docker** para ejecutar el proyecto localmente.
+**🐳 No necesitas Docker** para ejecutar el proyecto localmente.
 
-## Instalación en otro ordenador
-
-### 1. Clonar el repositorio
+### 1. 📥 Clonar el repositorio
 
 ```bash
 git clone https://github.com/serpermar/guessVerse.git
@@ -34,14 +48,14 @@ cd guessVerse
 code .
 ```
 
-### 2. Instalar dependencias del backend
+### 2. ⚙️ Instalar dependencias del backend
 
 ```bash
 cd backend
 npm install
 ```
 
-### 3. Variables de entorno del backend
+### 3. 🔐 Variables de entorno del backend
 
 Crea `backend/.env` al mismo nivel que su `package.json`:
 
@@ -65,9 +79,12 @@ NODE_ENV=development
 
 # CORS: obligatorio en producción (dominios separados por coma).
 # CORS_ORIGINS=https://guessverse.vercel.app,http://localhost:5173
+
+# Opcional: protege /api/import con el header X-Import-Token.
+# IMPORT_TOKEN=
 ```
 
-#### ¿Para qué sirve cada variable?
+#### 🧩 ¿Para qué sirve cada variable?
 
 - `TMDB_ACCESS_TOKEN`: acceso a la API de TMDB (importaciones).
 - `SUPABASE_URL`: URL del proyecto de Supabase.
@@ -75,10 +92,11 @@ NODE_ENV=development
 - `PORT`: puerto del backend.
 - `NODE_ENV`: entorno de ejecución.
 - `CORS_ORIGINS`: dominios permitidos. **Obligatoria cuando `NODE_ENV=production`.**
+- `IMPORT_TOKEN`: opcional; si existe, `/api/import` exige el header `X-Import-Token`.
 
-> **Seguridad:** no guardes credenciales reales en este README ni las subas al repositorio. `backend/.env` debe estar en `.gitignore`.
+> **🔒 Seguridad:** no guardes credenciales reales en este README ni las subas al repositorio. `backend/.env` debe estar en `.gitignore`.
 
-### 4. Instalar dependencias del frontend
+### 4. 🎨 Instalar dependencias del frontend
 
 En otra terminal, desde la raíz:
 
@@ -87,7 +105,7 @@ cd frontend
 npm install
 ```
 
-### 5. Variables de entorno del frontend
+### 5. 🔑 Variables de entorno del frontend
 
 Crea `frontend/.env` al mismo nivel que su `package.json`:
 
@@ -97,11 +115,11 @@ VITE_SUPABASE_URL=https://tu-proyecto.supabase.co
 VITE_SUPABASE_ANON_KEY=tu_supabase_anon_o_publishable_key
 ```
 
-**Importante:** las variables que empiezan por `VITE_` se incluyen en el bundle del navegador. La `VITE_SUPABASE_ANON_KEY` es pública por diseño (solo permite Auth). **Nunca** pongas aquí `SUPABASE_SERVICE_ROLE_KEY` ni `TMDB_ACCESS_TOKEN`.
+**⚠️ Importante:** las variables que empiezan por `VITE_` se incluyen en el bundle del navegador. La `VITE_SUPABASE_ANON_KEY` es pública por diseño (solo permite Auth). **Nunca** pongas aquí `SUPABASE_SERVICE_ROLE_KEY` ni `TMDB_ACCESS_TOKEN`.
 
 Si cambias variables de entorno, **reinicia Vite** para que las recoja.
 
-### 6. Iniciar el backend
+### 6. ▶️ Iniciar el backend
 
 ```bash
 cd backend
@@ -114,7 +132,7 @@ Verifica:
 curl http://localhost:3000/api/health
 ```
 
-### 7. Iniciar el frontend
+### 7. 🌐 Iniciar el frontend
 
 En otra terminal:
 
@@ -125,7 +143,9 @@ npm run dev
 
 Vite mostrará `http://localhost:5173`. Ábrelo en el navegador.
 
-## Configuración de Supabase Auth (necesaria para registro)
+---
+
+## 🔐 Configuración de Supabase Auth (necesaria para registro)
 
 En el panel de Supabase:
 
@@ -134,25 +154,31 @@ En el panel de Supabase:
    - **Site URL**: `http://localhost:5173`
    - **Redirect URLs**: `http://localhost:5173/auth/callback` y `http://localhost:5173/**`
 3. **Authentication → Email Templates → Confirm sign up** → usa un enlace como:
+
    ```html
    <a href="{{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&type=signup&next={{ .RedirectTo }}">
      Confirmar mi cuenta
    </a>
    ```
 
-Ver `docs/auth.md` para el flujo completo.
+📄 Ver [`docs/auth.md`](docs/auth.md) para el flujo completo.
 
-## Uso habitual
+---
+
+## 🎮 Uso habitual
 
 1. Abre la carpeta `guessVerse`.
 2. Terminal 1: `cd backend` → `npm run dev`.
 3. Terminal 2: `cd frontend` → `npm run dev`.
 4. Abre la URL que indique Vite.
 5. Regístrate → confirma el email → juega.
+6. Para multijugador, entra en **Lobby**, crea una sala y comparte el código de 5 letras.
 
 No hace falta `npm install` cada vez.
 
-## Actualizar una copia existente
+---
+
+## 🔄 Actualizar una copia existente
 
 ```bash
 git pull origin main
@@ -160,7 +186,9 @@ git pull origin main
 
 Si cambian dependencias, repite `npm install` en `backend/` y `frontend/`. `git pull` **no** descarga `.env` locales.
 
-## Acceder desde otro dispositivo de la misma red
+---
+
+## 📡 Acceder desde otro dispositivo de la misma red
 
 1. Averigua la IP local del ordenador servidor.
 2. Vite: `npm run dev -- --host 0.0.0.0`
@@ -168,9 +196,11 @@ Si cambian dependencias, repite `npm install` en `backend/` y `frontend/`. `git 
 4. Revisa CORS del backend (`CORS_ORIGINS`).
 5. Abre solo los puertos necesarios en el firewall.
 
-No expongas el backend directamente a Internet ni publiques credenciales.
+> **🔒 No expongas** el backend directamente a Internet ni publiques credenciales.
 
-## Desplegar en producción
+---
+
+## ☁️ Desplegar en producción
 
 Frontend y backend deben desplegarse en servicios accesibles por HTTPS (ej. Vercel + Railway/Render). Configura:
 
@@ -180,7 +210,9 @@ Frontend y backend deben desplegarse en servicios accesibles por HTTPS (ej. Verc
 - `IMPORT_TOKEN` opcional para proteger `/api/import` si se habilita fuera de desarrollo.
 - Rota las claves comprometidas antes de exponer el registro.
 
-## Scripts disponibles
+---
+
+## 📜 Scripts disponibles
 
 | Comando | Dónde | Uso |
 |---|---|---|
@@ -192,54 +224,88 @@ Frontend y backend deben desplegarse en servicios accesibles por HTTPS (ej. Verc
 | `npm run lint` | frontend | Ejecuta ESLint. |
 | `npm start` | backend | Ejecuta el build (`node dist/server.js`). |
 
-## Endpoints principales
+---
 
-**Públicos:**
-- `GET /api/health`
-- `GET /api/themes`
-- `GET /api/themes/:slug/questions`
+## 🔌 Endpoints principales
 
-**Protegidos (requieren `Authorization: Bearer <jwt>`):**
-- `POST /api/games`
-- `GET /api/games/:id`
-- `POST /api/games/:id/questions`
-- `POST /api/games/:id/guess`
-- `POST /api/games/:id/abandon`
-- `GET /api/users/me`
-- `PATCH /api/users/me`
-- `GET /api/users/me/stats`
-- `GET /api/users/me/games`
+### 🌍 Públicos
 
-Ver `docs/PROJECT_STATE.md` para el detalle completo.
+- `GET /api/health` — estado del servicio.
+- `GET /api/themes` — listado de temáticas.
+- `GET /api/themes/:slug` — detalle de una temática.
+- `GET /api/themes/:slug/questions` — preguntas de una temática.
+- `GET /api/discover?q=...` — buscador de franquicias.
 
-## Solución de problemas
+### 🛡️ Protegidos (requieren `Authorization: Bearer <jwt>`)
 
-### El backend no arranca
+- `POST /api/games` — crear partida individual.
+- `GET /api/games/:id` — detalle de partida.
+- `POST /api/games/:id/questions` — hacer una pregunta.
+- `POST /api/games/:id/guess` — adivinar el personaje.
+- `POST /api/games/:id/lose` — marcar derrota.
+- `POST /api/games/:id/abandon` — abandonar partida.
+- `GET /api/users/me` — perfil del usuario.
+- `PATCH /api/users/me` — editar username o avatar.
+- `GET /api/users/me/stats` — estadísticas.
+- `GET /api/users/me/games` — historial de partidas.
+- `PATCH /api/characters/:id` — editar atributos de un personaje.
+
+### ✏️ Temáticas y preguntas personalizadas
+
+- `POST /api/themes/:slug/questions` — crear pregunta personalizada (sin autenticación en la implementación actual).
+- `POST /api/discover/import` — importar una franquicia descubierta.
+
+### 🧪 Solo desarrollo (`NODE_ENV !== production`)
+
+- `/api/debug/*` — utilidades de depuración.
+- `/api/import/*` — importadores de temáticas; si `IMPORT_TOKEN` está definido, exige el header `X-Import-Token`.
+
+📚 Ver [`docs/PROJECT_STATE.md`](docs/PROJECT_STATE.md) para el detalle completo.
+
+---
+
+## ⚡ Eventos Socket.IO (multijugador)
+
+- 🏠 `create_room`, `join_room`
+- 🔄 `request_game_state` (reconexión automática)
+- ❓ `ask_question`, `question_result`, `opponent_asked`
+- 🎯 `make_guess`, `wrong_guess`, `game_over`
+- 🚪 `abandon_game`
+- 📴 `disconnect` (temporizador de 30 segundos)
+- 📡 `opponent_disconnected`, `opponent_reconnected`
+
+---
+
+## 🧯 Solución de problemas
+
+### ❌ El backend no arranca
 - Verifica `npm install` en `backend/`.
 - Revisa `backend/.env` (variables correctas).
 - Comprueba que el puerto está libre.
 
-### El frontend no conecta al backend
+### 🔌 El frontend no conecta al backend
 - Backend iniciado.
 - `VITE_API_URL` correcta.
 - Si accedes desde otro dispositivo, revisa IP, firewall y CORS.
 
-### No llega el email de confirmación
+### 📧 No llega el email de confirmación
 - Revisa spam.
 - Comprueba la plantilla "Confirm sign up" en Supabase.
 - Si persiste, configura un SMTP propio (Resend/Brevo) en Supabase.
 
-### No se cargan datos de Supabase o TMDB
+### 🗄️ No se cargan datos de Supabase o TMDB
 - Revisa credenciales y nombres de variables.
 - Comprueba que Supabase tiene el esquema aplicado.
 - Mira los logs del backend.
 
-### Tras clonar, el proyecto no funciona
+### 🧩 Tras clonar, el proyecto no funciona
 - `npm install` en `backend/` y `frontend/`.
 - Crea ambos `.env` con las variables correctas.
 - Verifica el esquema y políticas en Supabase.
 
-## Seguridad
+---
+
+## 🔒 Seguridad
 
 - No subas `.env` con credenciales reales.
 - `SUPABASE_SERVICE_ROLE_KEY` y `TMDB_ACCESS_TOKEN`: **solo backend**.
@@ -248,6 +314,16 @@ Ver `docs/PROJECT_STATE.md` para el detalle completo.
 - Revisa RLS y políticas en Supabase antes de desplegar.
 - Si una clave se publica accidentalmente, **rótala** en el proveedor.
 
-## Repositorio
+---
+
+## 📚 Documentación
+
+- [`docs/PROJECT_STATE.md`](docs/PROJECT_STATE.md) — estado, stack, esquema y roadmap.
+- [`docs/auth.md`](docs/auth.md) — flujo de autenticación y seguridad.
+- [`docs/CHANGELOG.md`](docs/CHANGELOG.md) — historial de cambios por bloque.
+
+---
+
+## 🌟 Repositorio
 
 [github.com/serpermar/guessVerse](https://github.com/serpermar/guessVerse)
