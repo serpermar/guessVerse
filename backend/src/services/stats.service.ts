@@ -45,34 +45,27 @@ export async function recordGameResult(
     questionsAsked: number,
     durationSeconds: number
 ): Promise<void> {
-    const { error: rpcError } = await supabaseAdmin.rpc('record_game_result', {
-        p_user_id: userId,
-        p_status: status,
-        p_questions: questionsAsked,
-        p_duration: durationSeconds,
-    });
-    if (!rpcError) return;
-    console.warn('⚠️ record_game_result no disponible, usando fallback:', rpcError.message);
+    const { data: existing } = await supabaseAdmin.from('statistics').select('*').eq('user_id', userId).maybeSingle();
+    const { data: user } = await supabaseAdmin.from('users').select('xp, level').eq('id', userId).single();
 
-    const { data: existing } = await supabaseAdmin
-        .from('statistics')
-        .select('*')
-        .eq('user_id', userId)
-        .maybeSingle();
-
-    const base = existing ?? {
-        user_id: userId, games_played: 0, games_won: 0, games_lost: 0,
-        games_abandoned: 0, questions_asked: 0, avg_duration_seconds: 0,
-    };
+    const base = existing ?? { user_id: userId, games_played: 0, games_won: 0, games_lost: 0, games_abandoned: 0, questions_asked: 0, avg_duration_seconds: 0, xp_earned: 0 };
+    const currentXp = user?.xp || 0;
 
     const played = base.games_played + 1;
     const won = base.games_won + (status === 'won' ? 1 : 0);
     const lost = base.games_lost + (status === 'lost' ? 1 : 0);
     const abandoned = base.games_abandoned + (status === 'abandoned' ? 1 : 0);
     const questions = base.questions_asked + questionsAsked;
-    const avg = base.avg_duration_seconds
-        ? Math.round((base.avg_duration_seconds * base.games_played + durationSeconds) / played)
-        : durationSeconds;
+    const avg = base.avg_duration_seconds ? Math.round((base.avg_duration_seconds * base.games_played + durationSeconds) / played) : durationSeconds;
+
+    // 🎯 LÓGICA DE XP
+    let xpGained = 10; // Base por jugar
+    if (status === 'won') xpGained += 50; // Bonus por ganar
+    if (questionsAsked <= 5 && status === 'won') xpGained += 20; // Bonus por eficiencia
+
+    const totalXp = currentXp + xpGained;
+    // Nivel = raíz cuadrada de (XP / 100). Nivel 2 a los 400 XP, Nivel 3 a los 900...
+    const newLevel = Math.floor(Math.sqrt(totalXp / 100)) + 1;
 
     await supabaseAdmin.from('statistics').upsert({
         user_id: userId,
@@ -82,6 +75,9 @@ export async function recordGameResult(
         games_abandoned: abandoned,
         questions_asked: questions,
         avg_duration_seconds: avg,
+        xp_earned: (base.xp_earned || 0) + xpGained,
         updated_at: new Date().toISOString(),
     }, { onConflict: 'user_id' });
+
+    await supabaseAdmin.from('users').update({ xp: totalXp, level: newLevel }).eq('id', userId);
 }

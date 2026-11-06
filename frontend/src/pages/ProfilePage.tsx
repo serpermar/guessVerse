@@ -1,12 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../features/auth/AuthProvider';
-import {
-    api,
-    type UserProfile,
-    type UserStats,
-    type GameHistoryItem,
-} from '../services/api';
+import { api, type UserProfile, type UserStats, type GameHistoryItem } from '../services/api';
 
 export function ProfilePage() {
     const { user, signOut } = useAuth();
@@ -38,12 +33,8 @@ export function ProfilePage() {
         nav('/', { replace: true });
     }
 
-    if (loading) {
-        return <div className="mx-auto max-w-3xl px-4 py-8 text-muted">Cargando perfil…</div>;
-    }
-    if (err) {
-        return <div className="mx-auto max-w-3xl px-4 py-8 text-red-500">{err}</div>;
-    }
+    if (loading) return <div className="mx-auto max-w-3xl px-4 py-8 text-muted">Cargando perfil…</div>;
+    if (err) return <div className="mx-auto max-w-3xl px-4 py-8 text-red-500">{err}</div>;
 
     return (
         <div className="mx-auto max-w-3xl space-y-6 px-4 py-8 text-fg">
@@ -58,14 +49,31 @@ export function ProfilePage() {
                     </div>
                 </div>
                 <div className="flex gap-2">
-                    <Link to="/" className="rounded-lg border border-border bg-surface-2 px-4 py-2 text-sm transition hover:bg-surface">
-                        Jugar
-                    </Link>
-                    <button onClick={onLogout} className="rounded-lg bg-red-500/90 px-4 py-2 text-sm text-white transition hover:bg-red-500">
-                        Salir
-                    </button>
+                    <Link to="/" className="rounded-lg border border-border bg-surface-2 px-4 py-2 text-sm transition hover:bg-surface">Jugar</Link>
+                    <button onClick={onLogout} className="rounded-lg bg-red-500/90 px-4 py-2 text-sm text-white transition hover:bg-red-500">Salir</button>
                 </div>
             </div>
+
+            {/* BARRA DE NIVEL Y XP */}
+            {profile && (
+                <div className="bg-slate-800 p-6 rounded-xl border border-slate-700">
+                    <div className="flex justify-between items-end mb-2">
+                        <div>
+                            <span className="text-sm text-slate-400">Nivel</span>
+                            <div className="text-3xl font-black text-purple-400">{profile.level || 1}</div>
+                        </div>
+                        <div className="text-sm text-slate-400">
+                            {(profile.xp || 0) % 100} / 100 XP para el siguiente nivel
+                        </div>
+                    </div>
+                    <div className="w-full bg-slate-900 rounded-full h-4 overflow-hidden">
+                        <div
+                            className="bg-gradient-to-r from-purple-500 to-pink-500 h-full rounded-full transition-all duration-1000"
+                            style={{ width: `${((profile.xp || 0) % 100)}%` }}
+                        />
+                    </div>
+                </div>
+            )}
 
             <section className="grid grid-cols-2 gap-3 sm:grid-cols-5">
                 <StatCard label="Jugadas" value={stats?.games_played ?? 0} />
@@ -77,17 +85,13 @@ export function ProfilePage() {
 
             <section>
                 <h2 className="mb-2 text-lg font-bold">Últimas partidas</h2>
-                {games.length === 0 && (
-                    <p className="italic text-muted">Todavía no has jugado ninguna partida.</p>
-                )}
+                {games.length === 0 && <p className="italic text-muted">Todavía no has jugado ninguna partida.</p>}
                 <ul className="space-y-1">
                     {games.map((g) => (
                         <li key={g.id} className="flex items-center justify-between rounded-lg border border-border bg-surface p-3 text-sm">
                             <div>
                                 <div className="font-semibold">{g.themes?.name ?? 'Partida'}</div>
-                                <div className="text-xs text-muted">
-                                    {g.started_at ? new Date(g.started_at).toLocaleString() : '—'}
-                                </div>
+                                <div className="text-xs text-muted">{g.started_at ? new Date(g.started_at).toLocaleString() : '—'}</div>
                             </div>
                             <StatusBadge status={g.status} />
                         </li>

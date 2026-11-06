@@ -68,6 +68,8 @@ export interface UserProfile {
     avatar_url: string | null;
     created_at: string;
     updated_at: string;
+    xp?: number;      // <-- NUEVO
+    level?: number;   // <-- NUEVO
 }
 
 export interface UserStats {
@@ -184,12 +186,12 @@ export const api = {
             body: JSON.stringify(franchise),
         }),
 
-    deleteTheme: (slug: string) =>
-        req<{ ok: boolean }>(`/api/themes/${slug}`, { method: 'DELETE' }),
-
     createQuestion: (themeSlug: string, textEs: string, attribute: string) =>
         req<{ data: QuestionDto }>(`/api/themes/${themeSlug}/questions`, {
             method: 'POST',
             body: JSON.stringify({ textEs, attribute }),
         }).then(r => r.data),
+
+    deleteTheme: (slug: string) =>
+        req<{ ok: boolean }>(`/api/themes/${slug}`, { method: 'DELETE' }),
 };
