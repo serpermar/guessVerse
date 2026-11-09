@@ -1,7 +1,14 @@
-// frontend/src/pages/DiscoverPage.tsx
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, type DiscoveredFranchise } from '../services/api';
+
+const KIND_CONFIG: Record<string, { label: string; icon: string; color: string }> = {
+    Película: { label: 'Película', icon: '🎬', color: 'bg-blue-600/80' },
+    Serie: { label: 'Serie', icon: '📺', color: 'bg-orange-600/80' },
+    Anime: { label: 'Anime', icon: '🎌', color: 'bg-pink-600/80' },
+    Videojuego: { label: 'Videojuego', icon: '🎮', color: 'bg-emerald-600/80' },
+    Libro: { label: 'Libro', icon: '📚', color: 'bg-purple-600/80' },
+};
 
 export function DiscoverPage() {
     const [query, setQuery] = useState('');
@@ -23,7 +30,12 @@ export function DiscoverPage() {
             const data = await api.discover(query);
             setResults(data);
         } catch (err) {
-            setError((err as Error).message);
+            const msg = (err as Error).message;
+            if (msg.includes('Failed to fetch') || msg.includes('ERR_CONNECTION_REFUSED')) {
+                setError('No se pudo conectar con el servidor. Revisa que el backend esté encendido.');
+            } else {
+                setError(msg);
+            }
         } finally {
             setLoading(false);
         }
@@ -40,21 +52,27 @@ export function DiscoverPage() {
                 nav(`/themes/${newSlug}`);
             }, 1500);
         } catch (err) {
-            setError((err as Error).message);
+            const msg = (err as Error).message;
+            if (msg.includes('Failed to fetch') || msg.includes('ERR_CONNECTION_REFUSED')) {
+                setError('El servidor está apagado o ha fallado. Revisa la terminal del backend.');
+            } else if (msg.includes('no se encontraron personajes') || msg.includes('no tiene personajes')) {
+                setError('No hemos encontrado personajes para este juego en IGDB. Prueba con otro juego o impórtalo manualmente.');
+            } else {
+                setError(msg);
+            }
             setImporting(null);
         }
     };
 
     return (
         <div className="min-h-screen bg-slate-950 text-white p-4 sm:p-8">
-            <div className="max-w-4xl mx-auto space-y-8 mt-6">
-
+            <div className="max-w-4xl mx-auto space-y-6 mt-6">
                 <div className="text-center space-y-2">
                     <h1 className="text-4xl font-black bg-gradient-to-r from-purple-400 to-pink-500 bg-clip-text text-transparent">
                         Descubrir Franquicias
                     </h1>
                     <p className="text-slate-400 max-w-xl mx-auto">
-                        Busca películas, series o anime. Importaremos a sus personajes automáticamente.
+                        Busca películas, series, anime, videojuegos o libros. Importaremos a sus personajes automáticamente.
                     </p>
                 </div>
 
@@ -63,7 +81,7 @@ export function DiscoverPage() {
                         type="text"
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
-                        placeholder="Escribe el nombre de una saga o serie..."
+                        placeholder="Escribe el nombre de una saga, juego o libro..."
                         className="flex-1 bg-transparent px-4 py-3 text-white placeholder-slate-500 focus:outline-none text-lg"
                         disabled={!!importing}
                     />
@@ -85,47 +103,50 @@ export function DiscoverPage() {
                 )}
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {results.map((r) => (
-                        <div key={r.externalId} className={`bg-slate-900 rounded-2xl overflow-hidden flex border transition-all ${importing === r.externalId ? 'border-purple-500 ring-2 ring-purple-500/50' : 'border-slate-800 hover:border-purple-500/50'}`}>
-
-                            <div className="w-32 shrink-0 bg-slate-950 relative">
-                                {r.imageUrl ? (
-                                    <img src={r.imageUrl} alt={r.name} className="w-full h-full object-cover" />
-                                ) : (
-                                    <div className="w-full h-full flex items-center justify-center text-slate-600">🎬</div>
-                                )}
-                                {/* ETIQUETA DE TIPO */}
-                                <span className={`absolute top-2 left-2 text-[10px] font-bold uppercase px-2 py-1 rounded-md backdrop-blur-md ${r.kind === 'Anime' ? 'bg-pink-600/80 text-white' :
-                                        r.kind === 'Serie' ? 'bg-blue-600/80 text-white' :
-                                            'bg-emerald-600/80 text-white'
-                                    }`}>
-                                    {r.kind === 'Anime' ? '🎌 Anime' : r.kind === 'Serie' ? '📺 Serie' : '🎬 Película'}
-                                </span>
-                            </div>
-
-                            <div className="p-5 flex-1 flex flex-col justify-between">
-                                <div>
-                                    <h3 className="font-bold text-lg leading-tight mb-2">{r.name}</h3>
-                                    <p className="text-xs text-slate-400 line-clamp-3">{r.description || 'Sin descripción.'}</p>
+                    {results.map((r) => {
+                        const config = KIND_CONFIG[r.kind] || KIND_CONFIG['Película'];
+                        return (
+                            <div key={r.externalId} className={`bg-slate-900 rounded-2xl overflow-hidden flex border transition-all ${importing === r.externalId ? 'border-purple-500 ring-2 ring-purple-500/50' : 'border-slate-800 hover:border-purple-500/50'}`}>
+                                <div className="w-32 shrink-0 bg-slate-950 relative">
+                                    {r.imageUrl ? (
+                                        <img src={r.imageUrl} alt={r.name} className="w-full h-full object-cover" />
+                                    ) : (
+                                        <div className="w-full h-full flex items-center justify-center text-slate-600">📦</div>
+                                    )}
+                                    <span className={`absolute top-2 left-2 text-[10px] font-bold uppercase px-2 py-1 rounded-md backdrop-blur-md text-white ${config.color}`}>
+                                        {config.icon} {config.label}
+                                    </span>
                                 </div>
 
-                                <button
-                                    onClick={() => handleImport(r)}
-                                    disabled={!!importing || success}
-                                    className="mt-4 w-full bg-slate-800 hover:bg-emerald-600 hover:border-emerald-500 border border-slate-700 text-white disabled:opacity-50 px-4 py-2.5 rounded-lg text-sm font-bold transition flex items-center justify-center gap-2"
-                                >
-                                    {importing === r.externalId ? (
-                                        <>
-                                            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                                            Importando...
-                                        </>
-                                    ) : (
-                                        <>➕ Importar</>
-                                    )}
-                                </button>
+                                <div className="p-5 flex-1 flex flex-col justify-between">
+                                    <div>
+                                        <h3 className="font-bold text-lg leading-tight mb-2">{r.name}</h3>
+                                        <p className="text-xs text-slate-400 line-clamp-3">{r.description || 'Sin descripción.'}</p>
+                                    </div>
+
+                                    <button
+                                        onClick={() => handleImport(r)}
+                                        disabled={!!importing || success || r.kind === 'Libro'}
+                                        className={`mt-4 w-full border text-white disabled:opacity-50 px-4 py-2.5 rounded-lg text-sm font-bold transition flex items-center justify-center gap-2 ${r.kind === 'Libro'
+                                            ? 'bg-slate-800 border-slate-700 cursor-not-allowed'
+                                            : 'bg-slate-800 hover:bg-emerald-600 hover:border-emerald-500 border-slate-700'
+                                            }`}
+                                    >
+                                        {importing === r.externalId ? (
+                                            <>
+                                                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                                                Importando...
+                                            </>
+                                        ) : r.kind === 'Libro' ? (
+                                            <>🚫 No importable</>
+                                        ) : (
+                                            <>➕ Importar</>
+                                        )}
+                                    </button>
+                                </div>
                             </div>
-                        </div>
-                    ))}
+                        );
+                    })}
                 </div>
 
                 {results.length === 0 && !loading && query && !error && (

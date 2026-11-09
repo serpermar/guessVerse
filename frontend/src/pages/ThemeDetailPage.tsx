@@ -79,10 +79,11 @@ export function ThemeDetailPage() {
         return detail.characters.filter((c) => c.name.toLowerCase().includes(q));
     }, [detail, search]);
 
-    const handlePlay = (size: number) => {
+    const handlePlay = (size: number, mode?: 'timed') => {
         if (!slug) return;
         resetGame();
-        nav(`/game/${slug}?size=${size}`);
+        const url = `/game/${slug}?size=${size}${mode === 'timed' ? '&mode=timed' : ''}`;
+        nav(url);
     };
 
     const handleSaveChar = async (e: React.FormEvent) => {
@@ -99,6 +100,8 @@ export function ThemeDetailPage() {
             });
 
             const payload = {
+                gender: editingChar.gender || 'unknown',
+                species: editingChar.species || null,
                 is_hero: editingChar.is_hero || false,
                 is_villain: editingChar.is_villain || false,
                 is_protagonist: editingChar.is_protagonist || false,
@@ -171,6 +174,9 @@ export function ThemeDetailPage() {
                         <button onClick={() => handlePlay(8)} className="w-full sm:w-auto bg-blue-600 hover:bg-blue-500 text-white px-4 py-4 rounded-xl font-bold text-sm shadow-lg shadow-blue-900/40 transition-all hover:-translate-y-0.5 whitespace-nowrap">
                             ⚡ Partida Rápida (8)
                         </button>
+                        <button onClick={() => handlePlay(16, 'timed')} className="w-full sm:w-auto bg-amber-600 hover:bg-amber-500 text-white px-4 py-4 rounded-xl font-bold text-sm shadow-lg shadow-amber-900/40 transition-all hover:-translate-y-0.5 whitespace-nowrap">
+                            ⏱️ Contrarreloj (60s)
+                        </button>
                         <button onClick={() => handlePlay(16)} className="w-full sm:w-auto bg-pink-600 hover:bg-pink-500 text-white px-8 py-4 rounded-xl font-bold text-lg shadow-lg shadow-pink-900/40 transition-all hover:-translate-y-0.5 whitespace-nowrap">
                             ▶ Partida Clásica (16)
                         </button>
@@ -233,8 +239,10 @@ export function ThemeDetailPage() {
                                     </div>
                                 </div>
                             )}
+
                             {schema.form.map((field: any) => {
                                 if (field.key === 'is_hero' || field.key === 'is_villain') return null;
+
                                 return (
                                     <div key={field.key}>
                                         {field.type === 'boolean' ? (
@@ -242,10 +250,25 @@ export function ThemeDetailPage() {
                                                 <input type="checkbox" checked={editingChar[field.key] || false} onChange={(e) => setEditingChar({ ...editingChar, [field.key]: e.target.checked })} className="w-4 h-4 accent-purple-500" />
                                                 <span className="text-sm font-medium text-slate-300">{field.label}</span>
                                             </label>
+                                        ) : field.type === 'select' ? (
+                                            <div>
+                                                <label className="block text-xs font-bold text-slate-400 uppercase mb-1">{field.label}</label>
+                                                <select
+                                                    value={editingChar[field.key] || 'unknown'}
+                                                    onChange={(e) => setEditingChar({ ...editingChar, [field.key]: e.target.value })}
+                                                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-purple-500 focus:outline-none"
+                                                >
+                                                    {field.options?.map((opt: string) => (
+                                                        <option key={opt} value={opt}>
+                                                            {opt === 'male' ? 'Hombre' : opt === 'female' ? 'Mujer' : 'Desconocido'}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            </div>
                                         ) : (
                                             <div>
                                                 <label className="block text-xs font-bold text-slate-400 uppercase mb-1">{field.label}</label>
-                                                <input type="text" value={editingChar.attributes[field.key] || ''} onChange={(e) => setEditingChar({ ...editingChar, attributes: { ...editingChar.attributes, [field.key]: e.target.value } })} placeholder={field.placeholder} className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white placeholder-slate-600 focus:border-purple-500 focus:outline-none" />
+                                                <input type="text" value={editingChar.attributes?.[field.key] || editingChar[field.key] || ''} onChange={(e) => setEditingChar({ ...editingChar, attributes: { ...editingChar.attributes, [field.key]: e.target.value } })} placeholder={field.placeholder} className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white placeholder-slate-600 focus:border-purple-500 focus:outline-none" />
                                             </div>
                                         )}
                                     </div>

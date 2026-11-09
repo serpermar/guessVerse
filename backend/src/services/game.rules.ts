@@ -12,22 +12,22 @@ export type Answer = 'yes' | 'no' | 'unknown';
 export function evaluate(value: unknown, operator: string, expected: unknown): Answer {
     if (value === null || value === undefined) return 'unknown';
 
+    // Normalizar strings para comparar
+    const normalize = (v: unknown) =>
+        typeof v === 'string' ? v.toLowerCase().trim() : v;
+
+    const v = normalize(value);
+    const e = normalize(expected);
+
     switch (operator) {
         case 'eq':
-            // Si ambos son strings, comparamos en minúsculas para evitar fallos
-            if (typeof value === 'string' && typeof expected === 'string') {
-                return value.toLowerCase().trim() === expected.toLowerCase().trim() ? 'yes' : 'no';
-            }
-            return value === expected ? 'yes' : 'no';
+            return v === e ? 'yes' : 'no';
         case 'ne':
-            if (typeof value === 'string' && typeof expected === 'string') {
-                return value.toLowerCase().trim() !== expected.toLowerCase().trim() ? 'yes' : 'no';
-            }
-            return value !== expected ? 'yes' : 'no';
+            return v !== e ? 'yes' : 'no';
         case 'in':
-            return Array.isArray(expected) && expected.includes(value) ? 'yes' : 'no';
+            return Array.isArray(e) && e.includes(v) ? 'yes' : 'no';
         case 'not_in':
-            return Array.isArray(expected) && !expected.includes(value) ? 'yes' : 'no';
+            return Array.isArray(e) && !e.includes(v) ? 'yes' : 'no';
         default:
             return 'unknown';
     }

@@ -15,6 +15,7 @@ const disconnectTimers = new Map<string, NodeJS.Timeout>();
 
 export function setupMultiplayerSockets(io: Server) {
     io.on('connection', (socket: Socket) => {
+
         socket.on('create_room', async (data, callback) => {
             try {
                 const { themeSlug, userId } = data;
@@ -84,13 +85,11 @@ export function setupMultiplayerSockets(io: Server) {
                 const { data: game } = await supabaseAdmin.from('games').select('current_turn_user_id, theme_id, status, room_code').eq('id', gameId).single();
                 if (game?.status === 'won' || game?.status === 'lost') return callback({ success: false, error: 'La partida ha terminado' });
 
-                // RECONEXIÓN CLAVE: Unir el socket a la sala de nuevo si recargó
                 socket.join(game!.room_code);
                 socket.data.userId = userId;
                 socket.data.gameId = gameId;
                 socket.data.roomCode = game!.room_code;
 
-                // Cancelar temporizador de desconexión si existía
                 const timerKey = `${gameId}:${userId}`;
                 if (disconnectTimers.has(timerKey)) {
                     clearTimeout(disconnectTimers.get(timerKey));
@@ -98,7 +97,7 @@ export function setupMultiplayerSockets(io: Server) {
                 }
 
                 await supabaseAdmin.from('game_players').update({ is_connected: true }).eq('game_id', gameId).eq('user_id', userId);
-                io.to(game!.room_code).emit('opponent_reconnected'); // Avisar al rival
+                io.to(game!.room_code).emit('opponent_reconnected');
 
                 const { data: theme } = await supabaseAdmin.from('themes').select('slug').eq('id', game!.theme_id).single();
                 const { data: player } = await supabaseAdmin.from('game_players').select('role, secret_character_id, characters(id, name, image_url)').eq('game_id', gameId).eq('user_id', userId).single();
@@ -110,7 +109,15 @@ export function setupMultiplayerSockets(io: Server) {
                 const isHost = player?.role === 'host';
                 const eliminatedIds = boardRows?.filter(row => isHost ? row.eliminated_by_host : row.eliminated_by_guest).map(row => row.character_id) || [];
 
-                callback({ success: true, board, secret, themeSlug: theme?.slug, isMyTurn: game?.current_turn_user_id === userId, eliminatedIds });
+                // Cargar historial del chat
+                const { data: chatHistory } = await supabaseAdmin
+                    .from('game_chat')
+                    .select('*')
+                    .eq('game_id', gameId)
+                    .order('created_at', { ascending: true })
+                    .limit(100);
+
+                callback({ success: true, board, secret, themeSlug: theme?.slug, isMyTurn: game?.current_turn_user_id === userId, eliminatedIds, chatHistory });
             } catch (err) { callback({ success: false, error: (err as Error).message }); }
         });
 
@@ -134,6 +141,10 @@ export function setupMultiplayerSockets(io: Server) {
                     const expected = (question.value as any)?.v;
                     const secretValue = (secretChar.attributes as any)?.[question.attribute] ?? (secretChar as any)[question.attribute];
                     answer = evaluate(secretValue, question.operator, expected);
+
+                    if (answer === 'unknown') {
+                        return callback({ success: false, error: 'Esa pregunta no aplica a esta temática. Prueba con otra.' });
+                    }
 
                     const { data: boardRows } = await supabaseAdmin.from('game_characters').select('character_id, characters(*)').eq('game_id', gameId);
                     for (const row of boardRows ?? []) {
@@ -175,13 +186,8 @@ export function setupMultiplayerSockets(io: Server) {
                     await supabaseAdmin.from('games').update({ current_turn_user_id: opponent?.user_id }).eq('id', gameId);
                     socket.emit('wrong_guess', { characterId });
                 }
-                
-                // CORRECCIÓN AQUÍ: callback?.
                 callback?.({ success: true });
-            } catch (err) { 
-                // CORRECCIÓN AQUÍ: callback?.
-                callback?.({ success: false, error: (err as Error).message }); 
-            }
+            } catch (err) { callback?.({ success: false, error: (err as Error).message }); }
         });
 
         socket.on('abandon_game', async (data) => {
@@ -192,6 +198,20 @@ export function setupMultiplayerSockets(io: Server) {
                 const opponent = players?.find(p => p.user_id !== userId);
                 await supabaseAdmin.from('games').update({ status: 'lost', winner_user_id: opponent?.user_id, finished_at: new Date().toISOString() }).eq('id', gameId);
                 io.to(game.room_code!).emit('game_over', { winnerId: opponent?.user_id });
+            }
+        });
+
+        socket.on('send_chat', async (data) => {
+            const { gameId, userId, message, userName } = data;
+            const { data: game } = await supabaseAdmin.from('games').select('room_code').eq('id', gameId).single();
+            if (game?.room_code) {
+                await supabaseAdmin.from('game_chat').insert({
+                    game_id: gameId,
+                    user_id: userId,
+                    user_name: userName,
+                    message: message
+                });
+                io.to(game.room_code).emit('receive_chat', { userId, userName, message });
             }
         });
 

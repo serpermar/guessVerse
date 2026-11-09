@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { socket } from '../lib/socket';
 import { useAuth } from '../features/auth/AuthProvider';
@@ -21,11 +21,19 @@ export function MultiplayerGamePage() {
     const [guessMode, setGuessMode] = useState(false);
     const [confirmCard, setConfirmCard] = useState<CharacterCard | null>(null);
 
-    // Estados de conectividad
     const [opponentDisconnected, setOpponentDisconnected] = useState(false);
     const [showAbandonConfirm, setShowAbandonConfirm] = useState(false);
-
     const [askedQuestions, setAskedQuestions] = useState<Set<string>>(new Set());
+
+    // Estados para el chat
+    const [chatMessages, setChatMessages] = useState<{ userName: string, message: string, isMe: boolean }[]>([]);
+    const [chatInput, setChatInput] = useState('');
+    const chatEndRef = useRef<HTMLDivElement>(null);
+
+    // Auto-scroll al último mensaje del chat
+    useEffect(() => {
+        chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, [chatMessages]);
 
     useEffect(() => {
         if (!user || !gameId) return;
@@ -40,6 +48,16 @@ export function MultiplayerGamePage() {
                     setIsMyTurn(res.isMyTurn);
                     setOpponentDisconnected(false);
                     if (res.eliminatedIds) setEliminated(new Set(res.eliminatedIds));
+
+                    // Cargar historial de chat si existe
+                    if (res.chatHistory) {
+                        setChatMessages(res.chatHistory.map((msg: any) => ({
+                            userName: msg.user_name,
+                            message: msg.message,
+                            isMe: msg.user_id === user.id
+                        })));
+                    }
+
                     if (res.themeSlug) {
                         const qs = await api.questions(res.themeSlug);
                         setQuestions(qs);
@@ -52,9 +70,7 @@ export function MultiplayerGamePage() {
 
         fetchState();
 
-        socket.on('connect', () => {
-            fetchState();
-        });
+        socket.on('connect', () => fetchState());
 
         socket.on('question_result', (data: { questionText: string, answer: string, matchedIds: string[] }) => {
             setLogs(prev => [...prev, { text: data.questionText, answer: data.answer }]);
@@ -74,8 +90,8 @@ export function MultiplayerGamePage() {
 
         socket.on('game_over', (data: { winnerId: string }) => {
             setWinnerId(data.winnerId);
-            setConfirmCard(null);       // Cierra el modal de adivinar si estaba abierto
-            setGuessMode(false);        // Desactiva el modo adivinar
+            setConfirmCard(null);
+            setGuessMode(false);
             setOpponentDisconnected(false);
         });
 
@@ -86,12 +102,15 @@ export function MultiplayerGamePage() {
             setIsMyTurn(false);
         });
 
-        socket.on('opponent_disconnected', () => {
-            setOpponentDisconnected(true);
-        });
+        socket.on('opponent_disconnected', () => setOpponentDisconnected(true));
+        socket.on('opponent_reconnected', () => setOpponentDisconnected(false));
 
-        socket.on('opponent_reconnected', () => {
-            setOpponentDisconnected(false);
+        socket.on('receive_chat', (data: { userId: string, userName: string, message: string }) => {
+            setChatMessages(prev => [...prev, {
+                userName: data.userName,
+                message: data.message,
+                isMe: data.userId === user.id
+            }]);
         });
 
         return () => {
@@ -102,15 +121,13 @@ export function MultiplayerGamePage() {
             socket.off('wrong_guess');
             socket.off('opponent_disconnected');
             socket.off('opponent_reconnected');
+            socket.off('receive_chat');
         };
     }, [user, gameId, nav]);
 
     const askQuestion = (code: string, text: string) => {
         if (!isMyTurn || opponentDisconnected || winnerId) return;
-        if (askedQuestions.has(code)) {
-            alert("Ya has hecho esa pregunta antes.");
-            return;
-        }
+        if (askedQuestions.has(code)) return;
 
         setIsMyTurn(false);
         socket.emit('ask_question', { gameId, userId: user?.id, questionCode: code, questionText: text }, (res: any) => {
@@ -126,9 +143,7 @@ export function MultiplayerGamePage() {
     const makeGuess = () => {
         if (!confirmCard || opponentDisconnected || winnerId) return;
         socket.emit('make_guess', { gameId, userId: user?.id, characterId: confirmCard.id }, (res: any) => {
-            if (!res.success) {
-                alert(res.error);
-            }
+            if (!res.success) alert(res.error);
         });
     };
 
@@ -137,25 +152,46 @@ export function MultiplayerGamePage() {
         nav('/');
     };
 
+    const handleSendMessage = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!chatInput.trim() || !user) return;
+
+        socket.emit('send_chat', {
+            gameId,
+            userId: user.id,
+            userName: user.email?.split('@')[0] || 'Jugador',
+            message: chatInput.trim()
+        });
+        setChatInput('');
+    };
+
+    const sendQuickChat = (msg: string) => {
+        if (!user) return;
+        socket.emit('send_chat', {
+            gameId,
+            userId: user.id,
+            userName: user.email?.split('@')[0] || 'Jugador',
+            message: msg
+        });
+    };
+
     if (!user) return null;
 
     return (
         <div className="min-h-screen bg-slate-950 text-white p-4 sm:p-6">
             <div className="max-w-7xl mx-auto space-y-6">
 
-                {/* Banner de Rival Desconectado */}
                 {opponentDisconnected && !winnerId && (
                     <div className="bg-yellow-900/80 border border-yellow-500 text-yellow-100 p-3 rounded-xl text-center font-bold animate-pulse">
                         ⏳ El rival se ha desconectado. Esperando reconexión (30s)...
                     </div>
                 )}
 
-                {/* Header */}
                 <div className="flex items-center justify-between bg-slate-900 p-4 rounded-xl border border-slate-800">
                     <div>
                         <h1 className="text-xl font-bold">Multijugador</h1>
                         <p className={`text-sm font-bold ${winnerId ? 'text-slate-400' :
-                                (isMyTurn && !opponentDisconnected ? 'text-emerald-400' : 'text-slate-500')
+                            (isMyTurn && !opponentDisconnected ? 'text-emerald-400' : 'text-slate-500')
                             }`}>
                             {winnerId ? 'Partida finalizada' :
                                 (opponentDisconnected ? '⏸️ Partida en pausa' :
@@ -172,7 +208,6 @@ export function MultiplayerGamePage() {
                 </div>
 
                 <div className="grid lg:grid-cols-[1fr_320px] gap-6">
-                    {/* Tablero */}
                     <div>
                         <div className="mb-4 flex gap-2">
                             {!winnerId && (
@@ -215,7 +250,6 @@ export function MultiplayerGamePage() {
                         </div>
                     </div>
 
-                    {/* Panel Lateral */}
                     <aside className="space-y-4">
                         {secret && (
                             <div className="bg-purple-900/30 border border-purple-500/50 p-4 rounded-xl text-center">
@@ -226,7 +260,7 @@ export function MultiplayerGamePage() {
 
                         <div>
                             <h3 className="text-sm uppercase text-slate-400 mb-2">Hacer Pregunta</h3>
-                            <div className="grid grid-cols-2 gap-1 max-h-60 overflow-y-auto pr-1">
+                            <div className="grid grid-cols-2 gap-1 max-h-40 overflow-y-auto pr-1">
                                 {questions.map((q) => {
                                     const alreadyAsked = askedQuestions.has(q.code);
                                     return (
@@ -245,7 +279,7 @@ export function MultiplayerGamePage() {
 
                         <div>
                             <h3 className="text-sm uppercase text-slate-400 mb-2">Historial</h3>
-                            <ul className="text-sm space-y-2 max-h-64 overflow-y-auto pr-1">
+                            <ul className="text-sm space-y-2 max-h-32 overflow-y-auto pr-1">
                                 {logs.map((l, i) => (
                                     <li key={i} className="bg-slate-800 p-2 rounded border border-slate-700">
                                         <div className="text-slate-300 text-xs">{l.text}</div>
@@ -258,16 +292,63 @@ export function MultiplayerGamePage() {
                                 ))}
                             </ul>
                         </div>
+
+                        <div className="bg-slate-900 rounded-xl border border-slate-800 flex flex-col h-64">
+                            <div className="p-3 border-b border-slate-800 bg-slate-900/50">
+                                <h3 className="text-sm font-bold text-slate-300">💬 Chat</h3>
+                            </div>
+
+                            <div className="flex-1 overflow-y-auto p-3 space-y-2 text-xs">
+                                {chatMessages.length === 0 && (
+                                    <div className="text-slate-500 italic text-center mt-4">No hay mensajes aún.</div>
+                                )}
+                                {chatMessages.map((msg, i) => (
+                                    <div key={i} className={`flex flex-col ${msg.isMe ? 'items-end' : 'items-start'}`}>
+                                        <span className="text-[9px] text-slate-500 mb-0.5 px-1">{msg.isMe ? 'Tú' : msg.userName}</span>
+                                        <div className={`p-2 rounded-lg max-w-[85%] break-words ${msg.isMe ? 'bg-purple-600 text-white rounded-tr-none' : 'bg-slate-700 text-slate-200 rounded-tl-none'}`}>
+                                            {msg.message}
+                                        </div>
+                                    </div>
+                                ))}
+                                <div ref={chatEndRef} />
+                            </div>
+
+                            <div className="p-2 border-t border-slate-800 bg-slate-900/50 space-y-2">
+                                <div className="flex flex-wrap gap-1">
+                                    {['GG', 'Buena!', 'Casi...'].map((msg) => (
+                                        <button key={msg} onClick={() => sendQuickChat(msg)} className="bg-slate-800 hover:bg-slate-700 text-[10px] px-2 py-1 rounded text-slate-300 transition">
+                                            {msg}
+                                        </button>
+                                    ))}
+                                </div>
+                                <form onSubmit={handleSendMessage} className="flex gap-1">
+                                    <input
+                                        type="text"
+                                        value={chatInput}
+                                        onChange={(e) => setChatInput(e.target.value)}
+                                        placeholder="Escribe un mensaje..."
+                                        maxLength={100}
+                                        className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-white focus:border-purple-500 focus:outline-none"
+                                    />
+                                    <button
+                                        type="submit"
+                                        disabled={!chatInput.trim()}
+                                        className="bg-purple-600 hover:bg-purple-500 disabled:opacity-50 px-3 py-1.5 rounded-lg text-xs font-bold transition"
+                                    >
+                                        Enviar
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
                     </aside>
                 </div>
             </div>
 
-            {/* MODAL FIN DE PARTIDA (Nuevo y llamativo) */}
             {winnerId && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fade-in">
                     <div className={`w-full max-w-md p-8 rounded-3xl border-2 text-center shadow-2xl transform transition-all animate-pop-in ${winnerId === user.id
-                            ? 'bg-gradient-to-br from-emerald-900 to-emerald-950 border-emerald-500/50 shadow-emerald-900/50'
-                            : 'bg-gradient-to-br from-red-900 to-red-950 border-red-500/50 shadow-red-900/50'
+                        ? 'bg-gradient-to-br from-emerald-900 to-emerald-950 border-emerald-500/50 shadow-emerald-900/50'
+                        : 'bg-gradient-to-br from-red-900 to-red-950 border-red-500/50 shadow-red-900/50'
                         }`}>
                         <div className="text-7xl mb-6 animate-bounce">
                             {winnerId === user.id ? '🏆' : '💀'}
@@ -283,8 +364,8 @@ export function MultiplayerGamePage() {
                         <button
                             onClick={() => nav('/')}
                             className={`w-full py-4 rounded-xl font-bold text-lg transition-transform hover:scale-105 ${winnerId === user.id
-                                    ? 'bg-white text-emerald-900 shadow-lg shadow-black/20'
-                                    : 'bg-slate-800 text-white border border-slate-700 hover:bg-slate-700'
+                                ? 'bg-white text-emerald-900 shadow-lg shadow-black/20'
+                                : 'bg-slate-800 text-white border border-slate-700 hover:bg-slate-700'
                                 }`}
                         >
                             Volver al inicio
@@ -293,7 +374,6 @@ export function MultiplayerGamePage() {
                 </div>
             )}
 
-            {/* Modal Abandonar */}
             {showAbandonConfirm && (
                 <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
                     <div className="bg-slate-900 rounded-2xl p-6 max-w-sm w-full text-center border border-red-900/50 shadow-xl">
@@ -307,7 +387,6 @@ export function MultiplayerGamePage() {
                 </div>
             )}
 
-            {/* Modal Confirmar Adivinación */}
             {confirmCard && !winnerId && (
                 <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
                     <div className="bg-slate-900 rounded-2xl p-6 max-w-sm w-full text-center border border-slate-700 shadow-xl">

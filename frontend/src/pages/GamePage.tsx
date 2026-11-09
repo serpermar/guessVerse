@@ -35,6 +35,7 @@ export function GamePage() {
     const { themeSlug } = useParams<{ themeSlug: string }>();
     const [searchParams] = useSearchParams();
     const boardSize = Number(searchParams.get('size')) || 16;
+    const isTimedMode = searchParams.get('mode') === 'timed';
 
     const nav = useNavigate();
 
@@ -47,6 +48,9 @@ export function GamePage() {
     const eliminated = useGameStore((s) => s.eliminated);
     const secret = useGameStore((s) => s.secret);
     const logs = useGameStore((s) => s.logs);
+    const timeLeft = useGameStore((s) => s.timeLeft);
+    const setTimeLeft = useGameStore((s) => s.setTimeLeft);
+
     const hydrate = useGameStore((s) => s.hydrate);
     const startGame = useGameStore((s) => s.startGame);
     const toggleEliminate = useGameStore((s) => s.toggleEliminate);
@@ -67,8 +71,28 @@ export function GamePage() {
         if (useGameStore.getState().status !== 'idle') return;
         startedRef.current = true;
         const restored = hydrate(themeSlug);
-        if (!restored) startGame(themeSlug, boardSize);
-    }, [themeSlug, hydrate, startGame, boardSize]);
+        if (!restored) {
+            // Si es modo timed, inicializamos a 60s
+            startGame(themeSlug, boardSize, isTimedMode ? 60 : undefined);
+        }
+    }, [themeSlug, hydrate, startGame, boardSize, isTimedMode]);
+
+    // Lógica del temporizador
+    useEffect(() => {
+        if (status !== 'playing' || timeLeft === null) return;
+
+        if (timeLeft <= 0) {
+            playSound('lose');
+            abandon();
+            return;
+        }
+
+        const timer = setInterval(() => {
+            setTimeLeft(timeLeft - 1);
+        }, 1000);
+
+        return () => clearInterval(timer);
+    }, [status, timeLeft, setTimeLeft, abandon]);
 
     const loadQuestions = useCallback(() => {
         if (!themeSlug) return () => undefined;
@@ -113,6 +137,11 @@ export function GamePage() {
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                 <h2 className="text-2xl font-bold">{theme?.name}</h2>
                 <div className="flex items-center gap-3 text-sm">
+                    {timeLeft !== null && (
+                        <span className={`rounded-full border px-3 py-1 font-bold flex items-center gap-1 ${timeLeft <= 10 ? 'bg-red-500/20 text-red-500 border-red-500/50 animate-pulse' : 'bg-slate-800 text-slate-300 border-slate-700'}`}>
+                            ⏱️ {timeLeft}s
+                        </span>
+                    )}
                     <span className="rounded-full border border-border bg-surface px-3 py-1 text-muted">Quedan <strong className="text-fg">{remaining}</strong></span>
                     <button onClick={() => { playSound('lose'); abandon(); }} disabled={status !== 'playing'} className="text-muted transition hover:text-red-500 disabled:opacity-40">Abandonar</button>
                     <button onClick={goHome} className="text-muted transition hover:text-fg">← Salir</button>
@@ -178,7 +207,6 @@ export function GamePage() {
                     <div className="rounded-2xl border border-border bg-surface p-4">
                         <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted">Preguntar</h3>
                         <div className="grid grid-cols-2 gap-1.5">
-                            {/* CORRECCIÓN AQUÍ: Renderizamos el error */}
                             {questionsError && (
                                 <div className="col-span-2 text-xs text-red-500">
                                     No se pudieron cargar las preguntas.{' '}
@@ -231,6 +259,7 @@ export function GamePage() {
                 <Modal title="Derrota" onClose={goHome} hideClose zIndex="z-20">
                     <div className="mb-4 text-6xl">💀</div>
                     <h3 className="mb-2 text-2xl font-bold">Derrota</h3>
+                    {timeLeft === 0 && <p className="text-red-400 mb-4">¡Se acabó el tiempo!</p>}
                     <button onClick={goHome} className="rounded-lg bg-brand-strong px-6 py-2 font-semibold text-white transition hover:opacity-90">Volver al inicio</button>
                 </Modal>
             )}

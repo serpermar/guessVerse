@@ -14,8 +14,9 @@ interface GameState {
   loading: boolean;
   error: string | null;
   logs: { question: string; answer: string }[];
+  timeLeft: number | null;
 
-  startGame: (themeSlug: string, boardSize?: number) => Promise<void>;
+  startGame: (themeSlug: string, boardSize?: number, timeLimit?: number) => Promise<void>;
   toggleEliminate: (id: string) => void;
   askQuestion: (code: string, text: string) => Promise<void>;
   makeGuess: (id: string) => Promise<void>;
@@ -23,6 +24,7 @@ interface GameState {
   hydrate: (themeSlug: string) => boolean;
   reset: () => void;
   clearError: () => void;
+  setTimeLeft: (time: number | null) => void;
 }
 
 function persist(s: GameState) {
@@ -30,7 +32,7 @@ function persist(s: GameState) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify({
     gameId: s.gameId, theme: s.theme, board: s.board,
     eliminated: Array.from(s.eliminated), status: s.status,
-    secret: s.secret, logs: s.logs,
+    secret: s.secret, logs: s.logs, timeLeft: s.timeLeft,
   }));
 }
 
@@ -45,7 +47,7 @@ export function readPersisted() {
 
 export const useGameStore = create<GameState>((set, get) => ({
   gameId: null, theme: null, board: [], eliminated: new Set(),
-  status: 'idle', secret: null, loading: false, error: null, logs: [],
+  status: 'idle', secret: null, loading: false, error: null, logs: [], timeLeft: null,
 
   hydrate: (themeSlug: string) => {
     const p = readPersisted();
@@ -54,13 +56,14 @@ export const useGameStore = create<GameState>((set, get) => ({
     return true;
   },
 
-  startGame: async (themeSlug, boardSize = 16) => {
+  startGame: async (themeSlug, boardSize = 16, timeLimit) => {
     set({ loading: true, error: null });
     try {
       const res = await api.createGame(themeSlug, boardSize);
       const base: GameState = {
         ...get(), gameId: res.gameId, theme: res.theme, board: res.board,
         eliminated: new Set(), status: 'playing', secret: null, logs: [], loading: false,
+        timeLeft: timeLimit || null,
       };
       set(base);
       persist(base);
@@ -75,7 +78,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     if (next.has(id)) next.delete(id); else next.add(id);
     set({ eliminated: next });
     persist({ ...get(), eliminated: next });
-    
+
     if (next.size >= get().board.length) {
       set({ status: 'lost' });
       persist({ ...get(), eliminated: next, status: 'lost' });
@@ -87,14 +90,20 @@ export const useGameStore = create<GameState>((set, get) => ({
     if (!gameId || status !== 'playing') return;
     try {
       const res = await api.askQuestion(gameId, code);
+
+      if (res.answer === 'unknown') {
+        set({ error: (res as any).message || 'Pregunta no válida para esta temática.' });
+        return;
+      }
+
       const elim = new Set(get().eliminated);
       if (res.answer === 'yes') res.matches.no.forEach((id) => elim.add(id));
       else if (res.answer === 'no') res.matches.yes.forEach((id) => elim.add(id));
 
-      const logAnswer = res.answer === 'yes' ? '✅ Sí' : res.answer === 'no' ? '❌ No' : '❓ Desconocido';
+      const logAnswer = res.answer === 'yes' ? '✅ Sí' : '❌ No';
       const logs = [...get().logs, { question: text, answer: logAnswer }];
       const isDead = elim.size >= get().board.length;
-      
+
       set({ eliminated: elim, logs, status: isDead ? 'lost' : 'playing' });
       persist({ ...get(), eliminated: elim, logs, status: isDead ? 'lost' : 'playing' });
     } catch (e) {
@@ -130,8 +139,9 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   reset: () => {
     localStorage.removeItem(STORAGE_KEY);
-    set({ gameId: null, theme: null, board: [], eliminated: new Set(), status: 'idle', secret: null, logs: [], error: null, loading: false });
+    set({ gameId: null, theme: null, board: [], eliminated: new Set(), status: 'idle', secret: null, logs: [], error: null, loading: false, timeLeft: null });
   },
 
   clearError: () => set({ error: null }),
+  setTimeLeft: (time) => set({ timeLeft: time }),
 }));

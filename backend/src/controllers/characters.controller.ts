@@ -4,13 +4,15 @@ import { supabaseAdmin } from '../db/supabase.js';
 import { z } from 'zod';
 
 const updateSchema = z.object({
+    gender: z.string().nullable().optional(),
+    species: z.string().nullable().optional(),
     is_hero: z.boolean().nullable().optional(),
     is_villain: z.boolean().nullable().optional(),
     is_protagonist: z.boolean().nullable().optional(),
     has_powers: z.boolean().nullable().optional(),
     uses_weapon: z.boolean().nullable().optional(),
     is_human: z.boolean().nullable().optional(),
-    attributes: z.record(z.string(), z.any()).optional(), // <-- CORREGIDO
+    attributes: z.record(z.string(), z.any()).optional(),
 });
 
 export const patchCharacter = asyncHandler(async (req: Request<{ id: string }>, res: Response) => {
@@ -18,6 +20,8 @@ export const patchCharacter = asyncHandler(async (req: Request<{ id: string }>, 
 
     const cleanData: any = {};
 
+    if (data.gender !== undefined) cleanData.gender = data.gender;
+    if (data.species !== undefined) cleanData.species = data.species;
     if (data.is_hero !== undefined) cleanData.is_hero = data.is_hero ?? false;
     if (data.is_villain !== undefined) cleanData.is_villain = data.is_villain ?? false;
     if (data.is_protagonist !== undefined) cleanData.is_protagonist = data.is_protagonist ?? false;

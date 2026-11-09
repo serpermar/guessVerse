@@ -29,7 +29,6 @@ function translateSpecies(raw: string | null): string | null {
     return SPECIES_TRANSLATION[clean] || clean;
 }
 
-// NUEVO: Adivinar especie por el nombre de la franquicia
 function guessSpeciesFromFranchise(franchiseName: string): string | null {
     const lower = franchiseName.toLowerCase();
     if (lower.includes('pirata') || lower.includes('pirates')) return 'pirata';
@@ -40,7 +39,6 @@ function guessSpeciesFromFranchise(franchiseName: string): string | null {
     return null;
 }
 
-// NUEVO: Adivinar especie/rol por el nombre del personaje
 function guessSpeciesFromName(name: string): string | null {
     const lower = name.toLowerCase();
     if (lower.includes('captain') || lower.includes('capitán')) return 'capitán';
@@ -55,7 +53,6 @@ function guessSpeciesFromName(name: string): string | null {
 async function guessFandomDomain(franchiseName: string): Promise<string | null> {
     const cleanName = franchiseName.toLowerCase().replace(/collection/g, '').replace(/[^a-z0-9]/g, '').trim();
     const candidates = [`${cleanName}.fandom.com`, `${cleanName}s.fandom.com`];
-
     for (const domain of candidates) {
         if (!domain || domain.startsWith('.fandom.com')) continue;
         try {
@@ -83,12 +80,29 @@ interface PendingCharacter {
     movieTitle: string;
 }
 
-interface AniListMediaResponse {
-    data?: { Media?: { characters?: { edges?: { role: string; node: { id: number; name: { full: string }; image: { large: string }; }; }[]; }; }; };
+// Mapeo de género de TMDB
+function mapGender(genderId: number | null | undefined): string {
+    if (genderId === 1) return 'female';
+    if (genderId === 2) return 'male';
+    return 'unknown';
+}
+
+// Mapeo de género de IGDB (0=Hombre, 1=Mujer, 2=Otro, 3=Desconocido)
+function mapIgdbGender(g: number | undefined): string {
+    return ['male', 'female', 'other', 'unknown'][g || 3] || 'unknown';
+}
+
+// Mapeo de especie de IGDB (1=Humano, 2=Alien, 3=Animal, 4=Android)
+function mapIgdbSpecies(s: number | undefined): string {
+    return ['unknown', 'human', 'alien', 'animal', 'android'][s || 0] || 'unknown';
 }
 
 export async function importFranchise(franchise: DiscoveredFranchise) {
     if (franchise.source === 'anilist') return importAniList(franchise);
+    if (franchise.source === 'igdb') return importIgdb(franchise);
+    if (franchise.source === 'openlibrary') {
+        throw new Error('Los libros aún no se pueden importar como temática jugable (no tienen personajes).');
+    }
     return importTmdb(franchise);
 }
 
@@ -183,15 +197,8 @@ async function importTmdb(franchise: DiscoveredFranchise) {
             }
         }
 
-        // Si después de Wikidata no hay especie, usamos heurísticas
-        if (!species) {
-            species = guessSpeciesFromName(char.name) || franchiseDefaultSpecies;
-        }
-
-        // Si aún así no hay especie, y parece humano por defecto
-        if (!species && char.cast.order < 3) {
-            species = 'humano';
-        }
+        if (!species) species = guessSpeciesFromName(char.name) || franchiseDefaultSpecies;
+        if (!species && char.cast.order < 3) species = 'humano';
 
         return { role, species };
     });
@@ -204,7 +211,7 @@ async function importTmdb(franchise: DiscoveredFranchise) {
             .from('characters')
             .upsert({
                 franchise_id: fran.id, slug: char.slug, name: char.name,
-                gender: char.cast.gender === 1 ? 'female' : char.cast.gender === 2 ? 'male' : 'unknown',
+                gender: mapGender(char.cast.gender),
                 image_url: char.imageUrl, is_hero: classification.role === 'hero',
                 is_villain: classification.role === 'villain', is_protagonist: char.cast.order < 3,
                 has_powers: false, attributes: { species: classification.species }
@@ -218,6 +225,88 @@ async function importTmdb(franchise: DiscoveredFranchise) {
         }
     }
     return { themeSlug, charactersCount: uniqueSlugs.size };
+}
+
+// --- IMPORTADOR DE IGDB (Videojuegos) ---
+async function importIgdb(franchise: DiscoveredFranchise) {
+    const themeSlug = slugify(franchise.name);
+    const clientId = process.env.IGDB_CLIENT_ID;
+    const clientSecret = process.env.IGDB_CLIENT_SECRET;
+
+    if (!clientId || !clientSecret) throw new Error('Faltan credenciales de IGDB en el .env');
+
+    // 1. Obtener Token
+    const tokenRes = await fetch(`https://id.twitch.tv/oauth2/token?client_id=${clientId}&client_secret=${clientSecret}&grant_type=client_credentials`, { method: 'POST' });
+    if (!tokenRes.ok) throw new Error('Fallo al conectar con Twitch para obtener el token de IGDB');
+    const tokenData = (await tokenRes.json()) as any;
+    const token = tokenData.access_token;
+    if (!token) throw new Error('No se pudo obtener el token de IGDB');
+
+    const headers = { 'Client-ID': clientId, 'Authorization': `Bearer ${token}`, 'Content-Type': 'text/plain' };
+
+    // 2. Buscar personajes con image_id Y url
+    const gameId = franchise.externalId;
+    const charactersRes = await fetch('https://api.igdb.com/v4/characters', {
+        method: 'POST', headers,
+        body: `fields name, gender, species, mug_shot.image_id, mug_shot.url; where games = (${gameId}); limit 50;`
+    });
+
+    if (!charactersRes.ok) {
+        const errorText = await charactersRes.text();
+        console.error('❌ Error de IGDB al buscar personajes:', errorText);
+        throw new Error(`Error al buscar personajes en IGDB: ${errorText}`);
+    }
+
+    const characters = (await charactersRes.json()) as any[];
+
+    if (!Array.isArray(characters) || characters.length === 0) {
+        throw new Error(`No se encontraron personajes para "${franchise.name}" en IGDB. Prueba con otra temática.`);
+    }
+
+    // 3. Guardar en Base de Datos
+    const { data: theme } = await supabaseAdmin
+        .from('themes').upsert({ slug: themeSlug, name: franchise.name, description: franchise.description, type: 'videogames', image_url: franchise.imageUrl, question_categories: ['identity', 'role', 'abilities'] }, { onConflict: 'slug' }).select('id').single();
+    if (!theme) throw new Error('Error creando theme en la base de datos');
+
+    const { data: fran } = await supabaseAdmin
+        .from('franchises').upsert({ theme_id: theme.id, slug: themeSlug, name: franchise.name, source: 'igdb', external_id: franchise.externalId }, { onConflict: 'theme_id,slug' }).select('id').single();
+    if (!fran) throw new Error('Error creando franchise en la base de datos');
+
+    for (const char of characters) {
+        const charSlug = slugify(char.name);
+
+        // Lógica robusta para obtener la URL de la imagen
+        let imageUrl: string | null = null;
+        if (char.mug_shot) {
+            if (char.mug_shot.url) {
+                // La URL de IGDB a veces viene como "//images.igdb.com/..." 
+                // y a veces como "https://images.igdb.com/..."
+                imageUrl = char.mug_shot.url.startsWith('//')
+                    ? `https:${char.mug_shot.url}`
+                    : char.mug_shot.url;
+            } else if (char.mug_shot.image_id) {
+                // Construir manualmente si solo tenemos el ID
+                imageUrl = `https://images.igdb.com/igdb/image/upload/t_thumb/${char.mug_shot.image_id}.jpg`;
+            }
+        }
+
+        const species = mapIgdbSpecies(char.species);
+
+        await supabaseAdmin.from('characters').upsert({
+            franchise_id: fran.id, slug: charSlug, name: char.name,
+            gender: mapIgdbGender(char.gender),
+            species: species,
+            image_url: imageUrl,
+            is_hero: false, is_villain: false, is_protagonist: false,
+            has_powers: false, attributes: { species }
+        }, { onConflict: 'franchise_id,slug' });
+    }
+
+    // Log para depurar: cuántos personajes tienen imagen
+    const withImage = characters.filter(c => c.mug_shot).length;
+    console.log(`📊 Personajes con imagen: ${withImage} de ${characters.length}`);
+
+    return { themeSlug, charactersCount: characters.length };
 }
 
 async function importAniList(franchise: DiscoveredFranchise) {
@@ -249,8 +338,8 @@ async function importAniList(franchise: DiscoveredFranchise) {
         body: JSON.stringify({ query, variables: { id: Number(franchise.externalId) } }),
     });
 
-    const data = (await res.json()) as AniListMediaResponse;
-    const edges = data.data?.Media?.characters?.edges || [];
+    const data = (await res.json()) as any;
+    const edges = data?.data?.Media?.characters?.edges || [];
 
     const uniqueSlugs = new Set<string>();
 
@@ -262,8 +351,6 @@ async function importAniList(franchise: DiscoveredFranchise) {
         uniqueSlugs.add(charSlug);
 
         const isMain = edge.role === 'MAIN';
-
-        // Para anime, asignamos una especie genérica basada en la franquicia o "humano"
         let species = guessSpeciesFromFranchise(franchise.name);
         if (!species && isMain) species = 'humano';
 

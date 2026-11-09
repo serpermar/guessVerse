@@ -23,25 +23,27 @@ function getSchemaForTheme(theme: ThemeDetailRow) {
 
     if (isPokemon) {
         return {
-            tags: ['species'],
+            tags: ['species', 'gender'],
             form: [
-                { key: 'species', label: 'Tipo Pokémon', type: 'text', placeholder: 'Ej: Fuego, Agua, Planta...' }
+                { key: 'gender', label: 'Género', type: 'select', options: ['male', 'female', 'unknown'] },
+                { key: 'species', label: 'Tipo Pokémon', type: 'text', placeholder: 'Ej: Fuego, Agua...' }
             ]
         };
     }
 
     if (isHarryPotter) {
         return {
-            tags: ['house', 'species'],
+            tags: ['house', 'species', 'gender'],
             form: [
-                { key: 'house', label: 'Casa de Hogwarts', type: 'text', placeholder: 'Ej: Gryffindor, Slytherin...' },
-                { key: 'species', label: 'Especie / Rol', type: 'text', placeholder: 'Ej: Mago, Muggle, Elfo...' }
+                { key: 'gender', label: 'Género', type: 'select', options: ['male', 'female', 'unknown'] },
+                { key: 'house', label: 'Casa de Hogwarts', type: 'text', placeholder: 'Ej: Gryffindor...' },
+                { key: 'species', label: 'Especie', type: 'text', placeholder: 'Ej: Mago, Muggle...' }
             ]
         };
     }
 
     return {
-        tags: ['is_hero', 'is_villain', 'has_powers', 'species'],
+        tags: ['is_hero', 'is_villain', 'has_powers', 'species', 'gender'],
         form: [
             { key: 'is_hero', label: '¿Es un Héroe?', type: 'boolean' },
             { key: 'is_villain', label: '¿Es un Villano?', type: 'boolean' },
@@ -57,7 +59,8 @@ function getSchemaForTheme(theme: ThemeDetailRow) {
             { key: 'has_magic', label: '¿Usa magia?', type: 'boolean' },
             { key: 'is_immortal', label: '¿Es inmortal?', type: 'boolean' },
             { key: 'is_criminal', label: '¿Es un criminal?', type: 'boolean' },
-            { key: 'species', label: 'Especie / Rol', type: 'text', placeholder: 'Ej: Atlantean, Hobbit, Elfo...' }
+            { key: 'species', label: 'Especie / Rol', type: 'text', placeholder: 'Ej: Atlantean, Hobbit, Elfo...' },
+            { key: 'gender', label: 'Género', type: 'select', options: ['male', 'female', 'unknown'] },
         ]
     };
 }

@@ -118,13 +118,23 @@ export interface ThemeDetail {
 }
 
 export interface DiscoveredFranchise {
-    source: string;
-    kind: 'Película' | 'Serie' | 'Anime';
-    externalId: string;
-    name: string;
-    description: string;
-    imageUrl: string | null;
+  source: 'tmdb_movie' | 'tmdb_tv' | 'anilist' | 'igdb' | 'openlibrary';
+  kind: 'Película' | 'Serie' | 'Anime' | 'Videojuego' | 'Libro';
+  externalId: string;
+  name: string;
+  description: string;
+  imageUrl: string | null;
 }
+
+
+export interface LeaderboardUser {
+  id: string;
+  username: string;
+  avatar_url: string | null;
+  xp: number;
+  level: number;
+}
+
 
 // ---------- API ----------
 export const api = {
