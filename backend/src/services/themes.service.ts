@@ -45,6 +45,7 @@ function getSchemaForTheme(theme: ThemeDetailRow) {
     return {
         tags: ['is_hero', 'is_villain', 'has_powers', 'species', 'gender'],
         form: [
+            { key: 'gender', label: 'Género', type: 'select', options: ['male', 'female', 'unknown'] },
             { key: 'is_hero', label: '¿Es un Héroe?', type: 'boolean' },
             { key: 'is_villain', label: '¿Es un Villano?', type: 'boolean' },
             { key: 'is_protagonist', label: '¿Es Protagonista?', type: 'boolean' },
@@ -59,8 +60,7 @@ function getSchemaForTheme(theme: ThemeDetailRow) {
             { key: 'has_magic', label: '¿Usa magia?', type: 'boolean' },
             { key: 'is_immortal', label: '¿Es inmortal?', type: 'boolean' },
             { key: 'is_criminal', label: '¿Es un criminal?', type: 'boolean' },
-            { key: 'species', label: 'Especie / Rol', type: 'text', placeholder: 'Ej: Atlantean, Hobbit, Elfo...' },
-            { key: 'gender', label: 'Género', type: 'select', options: ['male', 'female', 'unknown'] },
+            { key: 'species', label: 'Especie / Rol', type: 'text', placeholder: 'Ej: Atlantean, Hobbit, Elfo...' }
         ]
     };
 }
@@ -79,14 +79,14 @@ export async function getThemeDetail(slug: string): Promise<ThemeDetailResponse>
         findCustomQuestionsByThemeId(theme.id)
     ]);
 
-    // CORRECCIÓN: Usamos el texto (text_es) como clave para que no se dupliquen visualmente
+    // Unimos preguntas evitando duplicados por texto
     const questionMap = new Map();
     [...baseQuestions, ...customQuestions].forEach(q => questionMap.set(q.text_es, q));
     const questions = Array.from(questionMap.values());
 
     const schema = getSchemaForTheme(theme);
 
-    // Inyectamos las preguntas custom en el formulario de edición (evitando duplicados)
+    // Inyectamos las preguntas custom en el formulario de edición
     const uniqueCustomAttrs = new Set();
     customQuestions.forEach((q: any) => {
         if (!uniqueCustomAttrs.has(q.attribute)) {

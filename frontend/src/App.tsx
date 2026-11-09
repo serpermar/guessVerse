@@ -13,6 +13,7 @@ import { ThemeDetailPage } from './pages/ThemeDetailPage';
 import { DiscoverPage } from './pages/DiscoverPage';
 import { LobbyPage } from './pages/LobbyPage';
 import { MultiplayerGamePage } from './pages/MultiplayerGamePage';
+import { LeaderboardPage } from './pages/LeaderboardPage';
 
 function App() {
   return (
@@ -35,6 +36,7 @@ function App() {
                 <Route path="/themes/:slug" element={<ThemeDetailPage />} />
                 <Route path="/discover" element={<DiscoverPage />} />
                 <Route path="/lobby" element={<LobbyPage />} />
+                <Route path="/leaderboard" element={<LeaderboardPage />} />
                 <Route path="/multiplayer/:gameId" element={<MultiplayerGamePage />} />
               </Route>
 

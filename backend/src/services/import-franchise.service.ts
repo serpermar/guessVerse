@@ -4,6 +4,7 @@ import { tmdbFetch } from '../integrations/tmdb/client.js';
 import { getWikipediaImage } from '../integrations/wikipedia/client.js';
 import { getFandomImage } from '../integrations/fandom/client.js';
 import { classifyWithWikidata } from '../integrations/wikidata/client.js';
+import { generateThemeQuestionsAndAttributes } from './ai.service.js'; // <-- NUEVO
 import { supabaseAdmin } from '../db/supabase.js';
 import { slugify } from '../utils/text.js';
 
@@ -51,8 +52,20 @@ function guessSpeciesFromName(name: string): string | null {
 }
 
 async function guessFandomDomain(franchiseName: string): Promise<string | null> {
-    const cleanName = franchiseName.toLowerCase().replace(/collection/g, '').replace(/[^a-z0-9]/g, '').trim();
-    const candidates = [`${cleanName}.fandom.com`, `${cleanName}s.fandom.com`];
+    const cleanName = franchiseName
+        .toLowerCase()
+        .replace(/collection/g, '')
+        .replace(/\b(i{1,3}|iv|v|vi{0,3}|ix|x)\b/gi, '')
+        .replace(/[^a-z0-9]/g, '')
+        .trim();
+
+    const candidates = [
+        `${cleanName}.fandom.com`,
+        `${cleanName}s.fandom.com`,
+        `${cleanName}game.fandom.com`,
+        `${cleanName}wiki.fandom.com`,
+    ];
+
     for (const domain of candidates) {
         if (!domain || domain.startsWith('.fandom.com')) continue;
         try {
@@ -80,19 +93,16 @@ interface PendingCharacter {
     movieTitle: string;
 }
 
-// Mapeo de género de TMDB
 function mapGender(genderId: number | null | undefined): string {
     if (genderId === 1) return 'female';
     if (genderId === 2) return 'male';
     return 'unknown';
 }
 
-// Mapeo de género de IGDB (0=Hombre, 1=Mujer, 2=Otro, 3=Desconocido)
 function mapIgdbGender(g: number | undefined): string {
     return ['male', 'female', 'other', 'unknown'][g || 3] || 'unknown';
 }
 
-// Mapeo de especie de IGDB (1=Humano, 2=Alien, 3=Animal, 4=Android)
 function mapIgdbSpecies(s: number | undefined): string {
     return ['unknown', 'human', 'alien', 'animal', 'android'][s || 0] || 'unknown';
 }
@@ -104,6 +114,23 @@ export async function importFranchise(franchise: DiscoveredFranchise) {
         throw new Error('Los libros aún no se pueden importar como temática jugable (no tienen personajes).');
     }
     return importTmdb(franchise);
+}
+
+// --- FUNCIÓN AUXILIAR PARA GUARDAR PREGUNTAS DE IA ---
+async function saveAiQuestions(themeId: string, questions: any[]) {
+    for (const q of questions) {
+        await supabaseAdmin.from('questions').upsert({
+            theme_id: themeId,
+            code: `ai_${themeId.slice(0, 4)}_${q.attribute}_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+            text_es: q.text,
+            attribute: q.attribute,
+            operator: 'eq',
+            value: { v: q.value },
+            category: 'custom',
+            is_active: true
+        }, { onConflict: 'code' });
+    }
+    console.log(`🤖 Se guardaron ${questions.length} preguntas generadas por IA.`);
 }
 
 async function importTmdb(franchise: DiscoveredFranchise) {
@@ -121,16 +148,12 @@ async function importTmdb(franchise: DiscoveredFranchise) {
     if (franErr || !fran) throw new Error(`Error creando franchise: ${franErr?.message}`);
 
     let parts: { id: number; title: string }[] = [];
-    let overview = franchise.description;
-
     if (franchise.source === 'tmdb_movie') {
         const col = await tmdbFetch<any>(`/collection/${franchise.externalId}`);
         parts = col.parts;
-        overview = col.overview || overview;
     } else {
         const tv = await tmdbFetch<any>(`/tv/${franchise.externalId}`);
         parts = [{ id: tv.id, title: tv.name }];
-        overview = tv.overview || overview;
     }
 
     const uniqueSlugs = new Set<string>();
@@ -180,6 +203,7 @@ async function importTmdb(franchise: DiscoveredFranchise) {
         }
     }
 
+    // 1. Clasificación con Wikidata
     const classifications = await processInBatches(pendingChars, 5, async (char) => {
         let role: 'hero' | 'villain' | 'neutral' = 'neutral';
         let species: string | null = null;
@@ -203,9 +227,19 @@ async function importTmdb(franchise: DiscoveredFranchise) {
         return { role, species };
     });
 
+    // 2. Generar preguntas con IA
+    const characterNames = pendingChars.map(c => c.name);
+    const { questions: aiQuestions, characters: aiChars } = await generateThemeQuestionsAndAttributes(franchise.name, characterNames);
+
+    // 3. Guardar preguntas en BD
+    await saveAiQuestions(theme.id, aiQuestions);
+
+    // 4. Guardar personajes con atributos de IA
     for (let i = 0; i < pendingChars.length; i++) {
         const char = pendingChars[i];
         const classification = classifications[i];
+        const aiChar = aiChars.find(c => c.name === char.name);
+        const aiAttrs = aiChar ? aiChar.attributes : {};
 
         const { data: savedChar, error: charErr } = await supabaseAdmin
             .from('characters')
@@ -214,7 +248,8 @@ async function importTmdb(franchise: DiscoveredFranchise) {
                 gender: mapGender(char.cast.gender),
                 image_url: char.imageUrl, is_hero: classification.role === 'hero',
                 is_villain: classification.role === 'villain', is_protagonist: char.cast.order < 3,
-                has_powers: false, attributes: { species: classification.species }
+                has_powers: false,
+                attributes: { ...aiAttrs, species: classification.species }
             }, { onConflict: 'franchise_id,slug' }).select('id').single();
 
         if (savedChar && !charErr) {
@@ -227,7 +262,6 @@ async function importTmdb(franchise: DiscoveredFranchise) {
     return { themeSlug, charactersCount: uniqueSlugs.size };
 }
 
-// --- IMPORTADOR DE IGDB (Videojuegos) ---
 async function importIgdb(franchise: DiscoveredFranchise) {
     const themeSlug = slugify(franchise.name);
     const clientId = process.env.IGDB_CLIENT_ID;
@@ -235,7 +269,6 @@ async function importIgdb(franchise: DiscoveredFranchise) {
 
     if (!clientId || !clientSecret) throw new Error('Faltan credenciales de IGDB en el .env');
 
-    // 1. Obtener Token
     const tokenRes = await fetch(`https://id.twitch.tv/oauth2/token?client_id=${clientId}&client_secret=${clientSecret}&grant_type=client_credentials`, { method: 'POST' });
     if (!tokenRes.ok) throw new Error('Fallo al conectar con Twitch para obtener el token de IGDB');
     const tokenData = (await tokenRes.json()) as any;
@@ -244,7 +277,6 @@ async function importIgdb(franchise: DiscoveredFranchise) {
 
     const headers = { 'Client-ID': clientId, 'Authorization': `Bearer ${token}`, 'Content-Type': 'text/plain' };
 
-    // 2. Buscar personajes con image_id Y url
     const gameId = franchise.externalId;
     const charactersRes = await fetch('https://api.igdb.com/v4/characters', {
         method: 'POST', headers,
@@ -253,17 +285,16 @@ async function importIgdb(franchise: DiscoveredFranchise) {
 
     if (!charactersRes.ok) {
         const errorText = await charactersRes.text();
-        console.error('❌ Error de IGDB al buscar personajes:', errorText);
         throw new Error(`Error al buscar personajes en IGDB: ${errorText}`);
     }
 
     const characters = (await charactersRes.json()) as any[];
-
     if (!Array.isArray(characters) || characters.length === 0) {
-        throw new Error(`No se encontraron personajes para "${franchise.name}" en IGDB. Prueba con otra temática.`);
+        throw new Error(`No se encontraron personajes para "${franchise.name}" en IGDB.`);
     }
 
-    // 3. Guardar en Base de Datos
+    const fandomDomain = await guessFandomDomain(franchise.name);
+
     const { data: theme } = await supabaseAdmin
         .from('themes').upsert({ slug: themeSlug, name: franchise.name, description: franchise.description, type: 'videogames', image_url: franchise.imageUrl, question_categories: ['identity', 'role', 'abilities'] }, { onConflict: 'slug' }).select('id').single();
     if (!theme) throw new Error('Error creando theme en la base de datos');
@@ -272,21 +303,33 @@ async function importIgdb(franchise: DiscoveredFranchise) {
         .from('franchises').upsert({ theme_id: theme.id, slug: themeSlug, name: franchise.name, source: 'igdb', external_id: franchise.externalId }, { onConflict: 'theme_id,slug' }).select('id').single();
     if (!fran) throw new Error('Error creando franchise en la base de datos');
 
+    // Generar preguntas con IA
+    const characterNames = characters.map((c: any) => c.name);
+    const { questions: aiQuestions, characters: aiChars } = await generateThemeQuestionsAndAttributes(franchise.name, characterNames);
+    await saveAiQuestions(theme.id, aiQuestions);
+
+    let imagesFromIgdb = 0;
+    let imagesFromFandom = 0;
+
     for (const char of characters) {
         const charSlug = slugify(char.name);
+        const aiChar = aiChars.find(c => c.name === char.name);
+        const aiAttrs = aiChar ? aiChar.attributes : {};
 
-        // Lógica robusta para obtener la URL de la imagen
         let imageUrl: string | null = null;
-        if (char.mug_shot) {
-            if (char.mug_shot.url) {
-                // La URL de IGDB a veces viene como "//images.igdb.com/..." 
-                // y a veces como "https://images.igdb.com/..."
-                imageUrl = char.mug_shot.url.startsWith('//')
-                    ? `https:${char.mug_shot.url}`
-                    : char.mug_shot.url;
-            } else if (char.mug_shot.image_id) {
-                // Construir manualmente si solo tenemos el ID
-                imageUrl = `https://images.igdb.com/igdb/image/upload/t_thumb/${char.mug_shot.image_id}.jpg`;
+        if (char.mug_shot?.url) {
+            imageUrl = char.mug_shot.url.startsWith('//') ? `https:${char.mug_shot.url}` : char.mug_shot.url;
+            imagesFromIgdb++;
+        } else if (char.mug_shot?.image_id) {
+            imageUrl = `https://images.igdb.com/igdb/image/upload/t_thumb/${char.mug_shot.image_id}.jpg`;
+            imagesFromIgdb++;
+        }
+
+        if (!imageUrl && fandomDomain) {
+            const fandomImg = await getFandomImage(fandomDomain, char.name);
+            if (fandomImg) {
+                imageUrl = fandomImg;
+                imagesFromFandom++;
             }
         }
 
@@ -298,14 +341,11 @@ async function importIgdb(franchise: DiscoveredFranchise) {
             species: species,
             image_url: imageUrl,
             is_hero: false, is_villain: false, is_protagonist: false,
-            has_powers: false, attributes: { species }
+            has_powers: false, attributes: { ...aiAttrs, species }
         }, { onConflict: 'franchise_id,slug' });
     }
 
-    // Log para depurar: cuántos personajes tienen imagen
-    const withImage = characters.filter(c => c.mug_shot).length;
-    console.log(`📊 Personajes con imagen: ${withImage} de ${characters.length}`);
-
+    console.log(`📊 Resumen de imágenes para "${franchise.name}": IGDB: ${imagesFromIgdb}, Fandom: ${imagesFromFandom}`);
     return { themeSlug, charactersCount: characters.length };
 }
 
@@ -319,8 +359,6 @@ async function importAniList(franchise: DiscoveredFranchise) {
     const { data: fran, error: franErr } = await supabaseAdmin
         .from('franchises').upsert({ theme_id: theme.id, slug: themeSlug, name: franchise.name, source: 'anilist', external_id: franchise.externalId }, { onConflict: 'theme_id,slug' }).select('id').single();
     if (franErr || !fran) throw new Error(`Error creando franchise: ${franErr?.message}`);
-
-    console.log(`📥 Descargando personajes de AniList para "${franchise.name}"...`);
 
     const query = `
       query ($id: Int) {
@@ -341,6 +379,11 @@ async function importAniList(franchise: DiscoveredFranchise) {
     const data = (await res.json()) as any;
     const edges = data?.data?.Media?.characters?.edges || [];
 
+    // Generar preguntas con IA
+    const characterNames = edges.map((e: any) => e.node.name.full);
+    const { questions: aiQuestions, characters: aiChars } = await generateThemeQuestionsAndAttributes(franchise.name, characterNames);
+    await saveAiQuestions(theme.id, aiQuestions);
+
     const uniqueSlugs = new Set<string>();
 
     for (const edge of edges) {
@@ -350,6 +393,9 @@ async function importAniList(franchise: DiscoveredFranchise) {
         if (!charSlug || uniqueSlugs.has(charSlug)) continue;
         uniqueSlugs.add(charSlug);
 
+        const aiChar = aiChars.find(c => c.name === name);
+        const aiAttrs = aiChar ? aiChar.attributes : {};
+
         const isMain = edge.role === 'MAIN';
         let species = guessSpeciesFromFranchise(franchise.name);
         if (!species && isMain) species = 'humano';
@@ -358,7 +404,7 @@ async function importAniList(franchise: DiscoveredFranchise) {
             franchise_id: fran.id, slug: charSlug, name: name,
             gender: 'unknown', image_url: charNode.image.large,
             is_hero: isMain, is_villain: false, is_protagonist: isMain,
-            has_powers: true, attributes: { species }
+            has_powers: true, attributes: { ...aiAttrs, species }
         }, { onConflict: 'franchise_id,slug' });
     }
     return { themeSlug, charactersCount: uniqueSlugs.size };

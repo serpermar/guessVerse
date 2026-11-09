@@ -1,9 +1,10 @@
 import type { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { findUserById, updateUser } from '../repositories/users.repository.js';
-import { getStats } from '../services/stats.service.js';
+import { getStats, getGlobalLeaderboard } from '../services/stats.service.js';
 import { supabaseAdmin } from '../db/supabase.js';
 import { HttpError } from '../utils/http-error.js';
+import { asyncHandler } from '../utils/async-handler.js';
 
 export async function getMe(req: Request, res: Response, next: NextFunction) {
     try {
@@ -53,3 +54,9 @@ export async function getMyGames(req: Request, res: Response, next: NextFunction
         res.json({ data });
     } catch (err) { next(err); }
 }
+
+// Controlador para el Leaderboard
+export const getLeaderboard = asyncHandler(async (_req: Request, res: Response) => {
+    const ranking = await getGlobalLeaderboard(10);
+    res.json({ data: ranking });
+});

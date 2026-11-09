@@ -16,30 +16,29 @@ export function AppHeader() {
                 GuessVerse
             </Link>
 
-            <div className="flex gap-4 items-center">
+            <div className="flex gap-3 items-center">
                 {user ? (
                     <>
-                        <Link to="/lobby" className="text-sm font-semibold bg-blue-600/20 text-blue-300 hover:bg-blue-600/40 px-3 py-1.5 rounded-lg border border-blue-500/30 transition">
-                            ⚔️ Multijugador
+                        <Link to="/leaderboard" className="text-sm font-semibold bg-amber-600/20 text-amber-300 hover:bg-amber-600/40 px-3 py-1.5 rounded-lg border border-amber-500/30 transition flex items-center gap-1">
+                            <span>🏆</span> Ranking
                         </Link>
                         <Link to="/discover" className="text-sm font-semibold bg-purple-600/20 text-purple-300 hover:bg-purple-600/40 px-3 py-1.5 rounded-lg border border-purple-500/30 transition flex items-center gap-1">
                             <span>✨</span> Descubrir
+                        </Link>
+                        <Link to="/lobby" className="text-sm font-semibold bg-blue-600/20 text-blue-300 hover:bg-blue-600/40 px-3 py-1.5 rounded-lg border border-blue-500/30 transition flex items-center gap-1">
+                            <span>⚔️</span> Multijugador
                         </Link>
                         <Link to="/profile" className="text-sm font-medium hover:text-purple-400 transition">
                             Mi perfil
                         </Link>
                         <button onClick={handleLogout} className="text-sm font-medium text-slate-400 hover:text-red-400 transition">
-                            Cerrar sesión
+                            Salir
                         </button>
                     </>
                 ) : (
                     <>
-                        <Link to="/login" className="text-sm font-medium hover:text-purple-400 transition">
-                            Entrar
-                        </Link>
-                        <Link to="/register" className="text-sm bg-purple-600 hover:bg-purple-500 px-4 py-1.5 rounded-lg font-semibold transition">
-                            Registrarse
-                        </Link>
+                        <Link to="/login" className="text-sm font-medium hover:text-purple-400 transition">Entrar</Link>
+                        <Link to="/register" className="text-sm bg-purple-600 hover:bg-purple-500 px-4 py-1.5 rounded-lg font-semibold transition">Registrarse</Link>
                     </>
                 )}
             </div>

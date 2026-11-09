@@ -1,3 +1,4 @@
+// frontend/src/services/api.ts
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
@@ -46,6 +47,13 @@ export interface AskResponse {
     question: { code: string; text: string };
     answer: 'yes' | 'no' | 'unknown';
     matches: { yes: string[]; no: string[]; unknown: string[] };
+    message?: string;
+}
+
+export interface AskAiResponse {
+    answer: 'yes' | 'no' | 'unknown';
+    matchedIds: string[];
+    filters: Record<string, unknown>;
 }
 
 export interface GuessResponse {
@@ -68,8 +76,8 @@ export interface UserProfile {
     avatar_url: string | null;
     created_at: string;
     updated_at: string;
-    xp?: number;      // <-- NUEVO
-    level?: number;   // <-- NUEVO
+    xp?: number;
+    level?: number;
 }
 
 export interface UserStats {
@@ -113,39 +121,34 @@ export interface ThemeDetail {
     questions: QuestionDto[];
     schema: {
         tags: string[];
-        form: { key: string; label: string; type: 'boolean' | 'text'; placeholder?: string }[];
+        form: { key: string; label: string; type: 'boolean' | 'text' | 'select'; placeholder?: string; options?: string[] }[];
     };
 }
 
 export interface DiscoveredFranchise {
-  source: 'tmdb_movie' | 'tmdb_tv' | 'anilist' | 'igdb' | 'openlibrary';
-  kind: 'Película' | 'Serie' | 'Anime' | 'Videojuego' | 'Libro';
-  externalId: string;
-  name: string;
-  description: string;
-  imageUrl: string | null;
+    source: 'tmdb_movie' | 'tmdb_tv' | 'anilist' | 'igdb' | 'openlibrary';
+    kind: 'Película' | 'Serie' | 'Anime' | 'Videojuego' | 'Libro';
+    externalId: string;
+    name: string;
+    description: string;
+    imageUrl: string | null;
 }
-
 
 export interface LeaderboardUser {
-  id: string;
-  username: string;
-  avatar_url: string | null;
-  xp: number;
-  level: number;
+    id: string;
+    username: string;
+    avatar_url: string | null;
+    xp: number;
+    level: number;
 }
-
 
 // ---------- API ----------
 export const api = {
-    themes: () =>
-        req<{ data: Theme[] }>('/api/themes').then((r) => r.data),
+    themes: () => req<{ data: Theme[] }>('/api/themes').then((r) => r.data),
 
-    themeDetail: (slug: string) =>
-        req<ThemeDetail>(`/api/themes/${slug}`),
+    themeDetail: (slug: string) => req<ThemeDetail>(`/api/themes/${slug}`),
 
-    questions: (themeSlug: string) =>
-        req<{ data: QuestionDto[] }>(`/api/themes/${themeSlug}/questions`).then((r) => r.data),
+    questions: (themeSlug: string) => req<{ data: QuestionDto[] }>(`/api/themes/${themeSlug}/questions`).then((r) => r.data),
 
     createGame: (themeSlug: string, boardSize = 16) =>
         req<CreateGameResponse>('/api/games', {
@@ -159,14 +162,19 @@ export const api = {
             body: JSON.stringify({ questionCode }),
         }),
 
+    askFree: (gameId: string, freeText: string) =>
+        req<AskAiResponse>(`/api/games/${gameId}/ask-free`, {
+            method: 'POST',
+            body: JSON.stringify({ freeText }),
+        }),
+
     guess: (gameId: string, characterId: string) =>
         req<GuessResponse>(`/api/games/${gameId}/guess`, {
             method: 'POST',
             body: JSON.stringify({ characterId }),
         }),
 
-    abandon: (gameId: string) =>
-        req<{ status: 'lost' }>(`/api/games/${gameId}/abandon`, { method: 'POST' }),
+    abandon: (gameId: string) => req<{ status: 'lost' }>(`/api/games/${gameId}/abandon`, { method: 'POST' }),
 
     me: () => req<{ data: UserProfile }>('/api/users/me').then((r) => r.data),
 
@@ -180,6 +188,8 @@ export const api = {
 
     myGames: (limit = 20) =>
         req<{ data: GameHistoryItem[] }>(`/api/users/me/games?limit=${limit}`).then((r) => r.data),
+
+    getLeaderboard: () => req<{ data: LeaderboardUser[] }>('/api/users/leaderboard').then(r => r.data),
 
     updateCharacter: (id: string, data: Partial<CharacterDetail>) =>
         req<{ data: CharacterDetail }>(`/api/characters/${id}`, {
@@ -202,6 +212,5 @@ export const api = {
             body: JSON.stringify({ textEs, attribute }),
         }).then(r => r.data),
 
-    deleteTheme: (slug: string) =>
-        req<{ ok: boolean }>(`/api/themes/${slug}`, { method: 'DELETE' }),
+    deleteTheme: (slug: string) => req<{ ok: boolean }>(`/api/themes/${slug}`, { method: 'DELETE' }),
 };

@@ -64,6 +64,8 @@ export function GamePage() {
     const [questionsError, setQuestionsError] = useState(false);
     const [guessMode, setGuessMode] = useState(false);
     const [confirmCard, setConfirmCard] = useState<CharacterCard | null>(null);
+    const [aiQuery, setAiQuery] = useState('');
+    const [aiLoading, setAiLoading] = useState(false);
     const startedRef = useRef(false);
 
     useEffect(() => {
@@ -72,7 +74,6 @@ export function GamePage() {
         startedRef.current = true;
         const restored = hydrate(themeSlug);
         if (!restored) {
-            // Si es modo timed, inicializamos a 60s
             startGame(themeSlug, boardSize, isTimedMode ? 60 : undefined);
         }
     }, [themeSlug, hydrate, startGame, boardSize, isTimedMode]);
@@ -118,6 +119,45 @@ export function GamePage() {
         setConfirmCard(null);
         setGuessMode(false);
         await makeGuess(card.id);
+    };
+
+    const askAi = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!aiQuery.trim() || !gameId || status !== 'playing') return;
+
+        setAiLoading(true);
+        try {
+            const res = await api.askFree(gameId, aiQuery);
+
+            if (res.answer === 'unknown') {
+                alert((res as any).message || 'La IA no ha podido interpretar la pregunta. Prueba a reformularla.');
+                setAiLoading(false);
+                return;
+            }
+
+            // Actualizar tablero e historial con la respuesta de la IA
+            const elim = new Set(eliminated);
+            res.matchedIds.forEach(id => elim.add(id));
+
+            const answerLabel = res.answer === 'yes' ? '✅ Sí' : '❌ No';
+            const logs = [...useGameStore.getState().logs, {
+                question: `✨ IA: ${aiQuery}`,
+                answer: answerLabel,
+            }];
+
+            const isDead = elim.size >= board.length;
+            useGameStore.setState({
+                eliminated: elim,
+                logs,
+                status: isDead ? 'lost' : 'playing',
+            });
+
+            setAiQuery('');
+        } catch (err) {
+            alert('Error con la IA: ' + (err as Error).message);
+        } finally {
+            setAiLoading(false);
+        }
     };
 
     const goHome = () => { reset(); nav('/'); };
@@ -204,9 +244,41 @@ export function GamePage() {
                 </section>
 
                 <aside className="space-y-4">
+                    {/* NUEVO PANEL DE IA */}
+                    <div className="rounded-2xl border border-purple-500/40 bg-purple-900/10 p-4">
+                        <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-purple-300">
+                            ✨ Preguntar a la IA
+                        </h3>
+                        <form onSubmit={askAi} className="flex flex-col gap-2">
+                            <input
+                                type="text"
+                                value={aiQuery}
+                                onChange={(e) => setAiQuery(e.target.value)}
+                                placeholder="Ej: ¿Es un villano que usa magia?"
+                                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-purple-500 focus:outline-none"
+                                disabled={aiLoading || status !== 'playing'}
+                            />
+                            <button
+                                type="submit"
+                                disabled={aiLoading || !aiQuery.trim() || status !== 'playing'}
+                                className="bg-purple-600 hover:bg-purple-500 disabled:opacity-50 px-4 py-2 rounded-lg font-bold text-sm transition flex items-center justify-center gap-2"
+                            >
+                                {aiLoading ? (
+                                    <>
+                                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                                        Pensando...
+                                    </>
+                                ) : (
+                                    'Preguntar'
+                                )}
+                            </button>
+                        </form>
+                    </div>
+
+                    {/* PREGUNTAS PREDEFINIDAS */}
                     <div className="rounded-2xl border border-border bg-surface p-4">
-                        <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted">Preguntar</h3>
-                        <div className="grid grid-cols-2 gap-1.5">
+                        <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted">Preguntas rápidas</h3>
+                        <div className="grid grid-cols-2 gap-1.5 max-h-48 overflow-y-auto pr-1">
                             {questionsError && (
                                 <div className="col-span-2 text-xs text-red-500">
                                     No se pudieron cargar las preguntas.{' '}
@@ -217,11 +289,12 @@ export function GamePage() {
                                 <div className="col-span-2 text-xs italic text-muted">Cargando preguntas…</div>
                             )}
                             {questions.map((q) => (
-                                <button key={q.code} onClick={() => { playSound('click'); askQuestion(q.code, q.text_es); }} disabled={status !== 'playing'} className="rounded-lg border border-border bg-surface-2 p-2 text-xs transition hover:border-brand/50 hover:bg-surface disabled:opacity-40">{q.text_es}</button>
+                                <button key={q.code} onClick={() => { playSound('click'); askQuestion(q.code, q.text_es); }} disabled={status !== 'playing'} className="rounded-lg border border-border bg-surface-2 p-2 text-xs transition hover:border-brand/50 hover:bg-surface disabled:opacity-40 text-left">{q.text_es}</button>
                             ))}
                         </div>
                     </div>
 
+                    {/* HISTORIAL */}
                     <div className="rounded-2xl border border-border bg-surface p-4">
                         <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted">Historial</h3>
                         <ul className="max-h-72 space-y-1.5 overflow-y-auto text-sm">

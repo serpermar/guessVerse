@@ -81,3 +81,15 @@ export async function recordGameResult(
 
     await supabaseAdmin.from('users').update({ xp: totalXp, level: newLevel }).eq('id', userId);
 }
+
+// Ranking Global
+export async function getGlobalLeaderboard(limit = 10) {
+    const { data, error } = await supabaseAdmin
+        .from('users')
+        .select('id, username, avatar_url, xp, level')
+        .order('xp', { ascending: false })
+        .limit(limit);
+
+    if (error) throw new Error(`Error obteniendo ranking: ${error.message}`);
+    return data || [];
+}
