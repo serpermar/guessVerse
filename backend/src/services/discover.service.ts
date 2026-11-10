@@ -97,14 +97,34 @@ async function searchIgdbGames(query: string): Promise<DiscoveredFranchise[]> {
 // --- 4. Open Library (Libros) ---
 async function searchBooks(query: string): Promise<DiscoveredFranchise[]> {
     try {
-        const res = await fetch(`https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&limit=5&fields=key,title,author_name,first_publish_year,cover_i`);
-        const data = (await res.json()) as any;
-        return (data.docs || []).map((book: any) => ({
-            source: 'openlibrary', kind: 'Libro', externalId: book.key, name: book.title,
+        const res = await fetch(
+            `https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&limit=8&fields=key,title,author_name,first_publish_year,cover_i`,
+        );
+        const data = (await res.json()) as {
+            docs?: Array<{
+                key: string;
+                title: string;
+                author_name?: string[];
+                first_publish_year?: number;
+                cover_i?: number;
+            }>;
+        };
+
+        return (data.docs || []).map((book) => ({
+            source: 'openlibrary' as const,
+            kind: 'Libro' as const,
+            // Limpiamos "/works/" para que el import service solo reciba el ID limpio.
+            externalId: book.key.replace(/^\/?works\//, '').replace(/^\//, ''),
+            name: book.title,
+            // Autor + año como descripción corta; el import service pedirá
+            // la sinopsis completa al endpoint /works/{id}.json antes de la IA.
             description: `${book.author_name?.join(', ') || 'Autor desconocido'} (${book.first_publish_year || 's.f.'})`,
             imageUrl: book.cover_i ? `https://covers.openlibrary.org/b/id/${book.cover_i}-L.jpg` : null,
         }));
-    } catch (e) { console.error('Error buscando libros:', e); return []; }
+    } catch (e) {
+        console.error('Error buscando libros:', e);
+        return [];
+    }
 }
 
 // --- Orquestador principal ---

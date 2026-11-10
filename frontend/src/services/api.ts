@@ -242,7 +242,13 @@ export const api = {
         req<{ data: DiscoveredFranchise[] }>(`/api/discover?q=${encodeURIComponent(query)}`).then(r => r.data),
 
     importFranchise: (franchise: DiscoveredFranchise) =>
-        req<{ ok: boolean; message: string }>('/api/discover/import', {
+        req<{
+            ok: boolean;
+            message: string;
+            franchiseId?: string;
+            themeSlug?: string;
+            charactersImported?: number;
+        }>('/api/discover/import', {
             method: 'POST',
             body: JSON.stringify(franchise),
         }),

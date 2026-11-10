@@ -246,3 +246,195 @@ export async function askAiFree(
         clearTimeout(timeout);
     }
 }
+
+export interface BookInfo {
+    title: string;
+    authors: string[];
+    description: string;
+    firstPublishYear: number | null;
+}
+
+export interface BookCharacterExtract {
+    name: string;
+    species?: string | null;
+    gender?: 'male' | 'female' | 'other' | null;
+    is_human?: boolean | null;
+    is_hero?: boolean | null;
+    is_villain?: boolean | null;
+    is_protagonist?: boolean | null;
+    has_powers?: boolean | null;
+    uses_weapon?: boolean | null;
+    extraAttributes?: Record<string, string | boolean | number>;
+}
+
+/**
+ * Pide a Groq que extraiga los personajes principales del libro con sus atributos.
+ * Devuelve un array listo para insertar en `characters`. Si la IA falla, devuelve [].
+ */
+export async function extractBookCharacters(book: BookInfo): Promise<BookCharacterExtract[]> {
+    const apiKey = env.groqApiKey;
+    if (!apiKey) {
+        console.warn('⚠️ GROQ_API_KEY no configurada. No se pueden extraer personajes del libro.');
+        return [];
+    }
+
+    // Sanitizar título: quita "(series) 1-7", "(Saga)", "(Trilogía)", etc.
+    const cleanTitle = book.title
+        .replace(/\s*\(\s*(series|saga|trilog[ií]a|colecci[oó]n)\s*\)\s*\d*\s*(-\s*\d+)?/gi, '')
+        .replace(/\s*\([^)]*\)\s*/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    const prompt = `Eres un experto en literatura. Extrae los personajes de la obra "${cleanTitle}".
+
+Autor: ${book.authors.join(', ') || 'desconocido'}
+Año: ${book.firstPublishYear ?? 'desconocido'}
+
+Sinopsis:
+${book.description.slice(0, 2000) || '(sin sinopsis; usa tu conocimiento de la obra)'}
+
+Devuelve ÚNICAMENTE un JSON válido, sin markdown, con esta forma exacta:
+{"characters":[{"name":"Nombre del personaje","species":"humano","gender":"male","is_hero":true,"is_villain":false,"is_protagonist":true,"has_powers":false,"uses_weapon":false,"is_human":true,"extraAttributes":{}}]}
+
+Reglas:
+- Extrae entre 8 y 12 personajes principales/secundarios.
+- Solo personajes que aparezcan en la obra. NO inventes.
+- Si dudas de un campo usa null. Solo "name" es obligatorio.
+- "gender" debe ser "male", "female" u "other".
+- "extraAttributes" es un objeto (vacío {} si no hay atributos extra).
+- No incluyas texto adicional, solo el JSON puro.`;
+
+    // Cadena de fallbacks: modelos + modo JSON.
+    // 1) llama-3.3-70b: el más fiable con JSON en Groq.
+    // 2) gpt-oss-20b: el que ya usas en otras funciones.
+    // 3) llama-3.1-8b: último recurso rápido.
+    // Para cada modelo probamos con y sin response_format json_object,
+    // porque algunos modelos devuelven vacío con json_object en prompts largos.
+    const attempts: Array<{ model: string; jsonMode: boolean }> = [
+        { model: 'openai/gpt-oss-20b', jsonMode: true },
+        { model: 'openai/gpt-oss-20b', jsonMode: false },
+        { model: 'llama-3.1-8b-instant', jsonMode: false },
+    ];
+
+    for (const { model, jsonMode } of attempts) {
+        try {
+            const content = await callGroq(apiKey, model, prompt, jsonMode);
+            if (!content) {
+                console.warn(`[ai] ${model} (jsonMode=${jsonMode}) devolvió vacío`);
+                continue;
+            }
+
+            const parsed = extractJson(content);
+            const list = parsed?.characters;
+            if (!Array.isArray(list) || list.length === 0) {
+                console.warn(`[ai] ${model} (jsonMode=${jsonMode}) no devolvió "characters" válidos`);
+                continue;
+            }
+
+            const cleaned: BookCharacterExtract[] = list
+                .filter((c: any) => c && typeof c.name === 'string' && c.name.trim().length > 0)
+                .slice(0, 12)
+                .map((c: any) => ({
+                    name: String(c.name).trim(),
+                    species: typeof c.species === 'string' && c.species.trim() ? c.species.trim() : null,
+                    gender: ['male', 'female', 'other'].includes(c.gender) ? c.gender : null,
+                    is_human: typeof c.is_human === 'boolean' ? c.is_human : null,
+                    is_hero: typeof c.is_hero === 'boolean' ? c.is_hero : null,
+                    is_villain: typeof c.is_villain === 'boolean' ? c.is_villain : null,
+                    is_protagonist: typeof c.is_protagonist === 'boolean' ? c.is_protagonist : null,
+                    has_powers: typeof c.has_powers === 'boolean' ? c.has_powers : null,
+                    uses_weapon: typeof c.uses_weapon === 'boolean' ? c.uses_weapon : null,
+                    extraAttributes:
+                        c.extraAttributes && typeof c.extraAttributes === 'object' && !Array.isArray(c.extraAttributes)
+                            ? c.extraAttributes
+                            : {},
+                }));
+
+            if (cleaned.length > 0) {
+                console.log(`✅ Extraídos ${cleaned.length} personajes de "${cleanTitle}" con ${model} (jsonMode=${jsonMode})`);
+                return cleaned;
+            }
+        } catch (err) {
+            console.warn(`[ai] Fallo con ${model} (jsonMode=${jsonMode}):`, (err as Error).message);
+        }
+    }
+
+    console.error(`❌ No se pudieron extraer personajes de "${cleanTitle}" con ningún modelo.`);
+    return [];
+}
+
+// --- Helpers privados para extractBookCharacters ---
+
+async function callGroq(
+    apiKey: string,
+    model: string,
+    prompt: string,
+    jsonMode: boolean,
+): Promise<string | null> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 45_000);
+
+    try {
+        const body: Record<string, unknown> = {
+            model,
+            messages: [{ role: 'user', content: prompt }],
+            temperature: 0.1,
+            max_tokens: 4000,
+        };
+        if (jsonMode) body.response_format = { type: 'json_object' };
+
+        const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${apiKey}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(body),
+            signal: controller.signal,
+        });
+
+        if (!res.ok) {
+            const errText = await res.text().catch(() => '');
+            console.warn(`[ai:${model}] HTTP ${res.status}: ${errText.slice(0, 300)}`);
+            return null;
+        }
+
+        const data = (await res.json()) as {
+            choices?: Array<{ message?: { content?: string } }>;
+        };
+        return data.choices?.[0]?.message?.content ?? null;
+    } catch (err) {
+        if (err instanceof Error && err.name === 'AbortError') {
+            console.warn(`[ai:${model}] Timeout de 45s`);
+        }
+        return null;
+    } finally {
+        clearTimeout(timeout);
+    }
+}
+
+/**
+ * Intenta parsear JSON de una respuesta que puede venir:
+ * - Como JSON puro.
+ * - Dentro de ```json ... ``` o ``` ... ```.
+ * - Con texto alrededor; extraemos el primer {...} balanceado.
+ */
+function extractJson(text: string): any {
+    // 1. Parse directo
+    try { return JSON.parse(text); } catch { /* noop */ }
+
+    // 2. Bloque markdown
+    const codeBlock = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+    if (codeBlock) {
+        try { return JSON.parse(codeBlock[1].trim()); } catch { /* noop */ }
+    }
+
+    // 3. Primer {...} balanceado
+    const first = text.indexOf('{');
+    const last = text.lastIndexOf('}');
+    if (first !== -1 && last > first) {
+        try { return JSON.parse(text.slice(first, last + 1)); } catch { /* noop */ }
+    }
+
+    return null;
+}

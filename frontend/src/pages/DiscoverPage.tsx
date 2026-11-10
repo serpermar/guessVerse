@@ -45,18 +45,24 @@ export function DiscoverPage() {
         setImporting(franchise.externalId);
         setError(null);
         try {
-            await api.importFranchise(franchise);
+            const res = await api.importFranchise(franchise);
             setSuccess(true);
+
+            // Para libros usamos el themeSlug devuelto por el backend
+            // (los libros crean su propia temática con slug = slugify(título)).
+            const targetSlug =
+                res.themeSlug ??
+                franchise.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
             setTimeout(() => {
-                const newSlug = franchise.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-                nav(`/themes/${newSlug}`);
+                nav(`/themes/${targetSlug}`);
             }, 1500);
         } catch (err) {
             const msg = (err as Error).message;
             if (msg.includes('Failed to fetch') || msg.includes('ERR_CONNECTION_REFUSED')) {
                 setError('El servidor está apagado o ha fallado. Revisa la terminal del backend.');
-            } else if (msg.includes('no se encontraron personajes') || msg.includes('no tiene personajes')) {
-                setError('No hemos encontrado personajes para este juego en IGDB. Prueba con otro juego o impórtalo manualmente.');
+            } else if (msg.includes('personajes')) {
+                setError(msg); // Ya trae el mensaje específico del backend
             } else {
                 setError(msg);
             }
@@ -68,11 +74,9 @@ export function DiscoverPage() {
         <div className="min-h-screen bg-canvas p-4 text-fg sm:p-8">
             <div className="mx-auto mt-6 max-w-4xl space-y-6">
                 <div className="space-y-2 text-center">
-                    <h1 className="text-brand-gradient text-4xl font-black">
-                        Descubrir Franquicias
-                    </h1>
+                    <h1 className="text-brand-gradient text-4xl font-black">Descubrir Franquicias</h1>
                     <p className="mx-auto max-w-xl text-muted">
-                        Busca películas, series, anime, videojuegos o libros. Importaremos a sus personajes automáticamente.
+                        Busca películas, series, anime, videojuegos o libros. Los personajes se importan automáticamente (en libros, con IA).
                     </p>
                 </div>
 
@@ -94,7 +98,11 @@ export function DiscoverPage() {
                     </button>
                 </form>
 
-                {error && <div role="alert" className="rounded-xl border border-red-500/40 bg-red-500/10 p-4 text-center text-red-600 dark:text-red-300">{error}</div>}
+                {error && (
+                    <div role="alert" className="rounded-xl border border-red-500/40 bg-red-500/10 p-4 text-center text-red-600 dark:text-red-300">
+                        {error}
+                    </div>
+                )}
 
                 {success && (
                     <div className="animate-pulse rounded-xl border border-emerald-500/50 bg-emerald-500/10 p-4 text-center text-lg font-bold text-emerald-600 dark:text-emerald-300">
@@ -106,7 +114,10 @@ export function DiscoverPage() {
                     {results.map((r) => {
                         const config = KIND_CONFIG[r.kind] || KIND_CONFIG['Película'];
                         return (
-                            <div key={r.externalId} className={`flex overflow-hidden rounded-2xl border bg-surface transition-all ${importing === r.externalId ? 'border-brand ring-2 ring-brand/50' : 'border-border hover:border-brand/50'}`}>
+                            <div
+                                key={`${r.source}:${r.externalId}`}
+                                className={`flex overflow-hidden rounded-2xl border bg-surface transition-all ${importing === r.externalId ? 'border-brand ring-2 ring-brand/50' : 'border-border hover:border-brand/50'}`}
+                            >
                                 <div className="relative w-32 shrink-0 bg-canvas">
                                     {r.imageUrl ? (
                                         <img src={r.imageUrl} alt={r.name} loading="lazy" decoding="async" className="h-full w-full object-cover" />
@@ -122,23 +133,23 @@ export function DiscoverPage() {
                                     <div>
                                         <h3 className="mb-2 text-lg font-bold leading-tight">{r.name}</h3>
                                         <p className="line-clamp-3 text-xs text-muted">{r.description || 'Sin descripción.'}</p>
+                                        {r.kind === 'Libro' && (
+                                            <p className="mt-2 text-[11px] text-purple-500/80">
+                                                📚 Los personajes se extraerán automáticamente con IA. Revísalos después en la temática.
+                                            </p>
+                                        )}
                                     </div>
 
                                     <button
                                         onClick={() => handleImport(r)}
-                                        disabled={!!importing || success || r.kind === 'Libro'}
-                                        className={`mt-4 flex w-full items-center justify-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-bold text-white transition disabled:opacity-50 ${r.kind === 'Libro'
-                                            ? 'cursor-not-allowed border-border bg-surface-2 text-muted'
-                                            : 'border-border bg-surface-2 text-fg hover:border-emerald-500 hover:bg-emerald-600 hover:text-white'
-                                            }`}
+                                        disabled={!!importing || success}
+                                        className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg border border-border bg-surface-2 px-4 py-2.5 text-sm font-bold text-fg transition hover:border-emerald-500 hover:bg-emerald-600 hover:text-white disabled:opacity-50"
                                     >
                                         {importing === r.externalId ? (
                                             <>
                                                 <div className="h-4 w-4 animate-spin rounded-full border-2 border-current/30 border-t-current"></div>
-                                                Importando...
+                                                Importando{r.kind === 'Libro' ? ' (IA)…' : '…'}
                                             </>
-                                        ) : r.kind === 'Libro' ? (
-                                            <>🚫 No importable</>
                                         ) : (
                                             <>➕ Importar</>
                                         )}
