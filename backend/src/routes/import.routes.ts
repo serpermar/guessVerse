@@ -15,6 +15,7 @@ import { seedHarryPotterAttributes } from '../services/attribute-seed-harrypotte
 import { importDC } from '../services/import-dc.service.js';
 import { seedDCAttributes } from '../services/attribute-seed-dc.service.js';
 import { requireImportToken } from '../middleware/import-auth.middleware.js';
+import { deduplicateCharacters } from '../services/cleanup.service.js';
 
 export const importRouter = Router();
 
@@ -102,4 +103,11 @@ importRouter.post('/dc', async (_req, res, next) => {
 importRouter.post('/attributes-dc', async (_req, res, next) => {
     try { res.json({ ok: true, result: await seedDCAttributes() }); }
     catch (err) { next(err); }
+});
+
+importRouter.post('/dedupe/:franchiseId', async (req, res, next) => {
+    try {
+        const result = await deduplicateCharacters(req.params.franchiseId);
+        res.json({ ok: true, result });
+    } catch (err) { next(err); }
 });

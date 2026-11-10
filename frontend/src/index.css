@@ -9,28 +9,23 @@
    ========================================================================== */
 
 :root {
-  --color-canvas: #f8fafc;
-  --color-surface: #ffffff;
-  --color-surface-2: #f1f5f9;
-  --color-border: #e2e8f0;
-  --color-fg: #0f172a;
-  --color-muted: #64748b;
-  --color-brand: #7c3aed;
-  --color-brand-strong: #6d28d9;
-  --color-accent: #db2777;
+  --bg-canvas: #f8fafc;
+  --bg-surface: #ffffff;
+  --bg-surface-2: #f1f5f9;
+  --text-fg: #0f172a;
+  --text-muted: #64748b;
+  --border-color: #e2e8f0;
 }
 
 .dark {
-  --color-canvas: #020617;
-  --color-surface: #0f172a;
-  --color-surface-2: #1e293b;
-  --color-border: #1e293b;
-  --color-fg: #f8fafc;
-  --color-muted: #94a3b8;
-  --color-brand: #a78bfa;
-  --color-brand-strong: #8b5cf6;
-  --color-accent: #f472b6;
+  --bg-canvas: #020617;
+  --bg-surface: #0f172a;
+  --bg-surface-2: #1e293b;
+  --text-fg: #f8fafc;
+  --text-muted: #94a3b8;
+  --border-color: #1e293b;
 }
+
 
 @theme inline {
   --color-canvas: var(--color-canvas);
@@ -49,24 +44,66 @@
 }
 
 @keyframes fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
 }
 
 @keyframes pop-in {
-  from { opacity: 0; transform: scale(0.94); }
-  to { opacity: 1; transform: scale(1); }
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 @keyframes flip {
-  from { opacity: 0; transform: rotateY(90deg); }
-  to { opacity: 1; transform: rotateY(0); }
+  from {
+    opacity: 0;
+    transform: rotateY(90deg);
+  }
+
+  to {
+    opacity: 1;
+    transform: rotateY(0);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
+
+  *,
+  *::before,
+  *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+
+@theme {
+  --color-brand: #a855f7;
+  --color-brand-strong: #9333ea;
+  --color-accent: #ec4899;
+
+  /* Variables para el tema */
+  --color-canvas: var(--bg-canvas);
+  --color-surface: var(--bg-surface);
+  --color-surface-2: var(--bg-surface-2);
+  --color-fg: var(--text-fg);
+  --color-muted: var(--text-muted);
+  --color-border: var(--border-color);
+}
+
+body {
+  background-color: var(--color-canvas);
+  color: var(--color-fg);
 }

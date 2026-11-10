@@ -14,7 +14,7 @@ export function MultiplayerGamePage() {
     const [questions, setQuestions] = useState<QuestionDto[]>([]);
 
     const [isMyTurn, setIsMyTurn] = useState(false);
-    const [logs, setLogs] = useState<{ text: string, answer: string }[]>([]);
+    const [logs, setLogs] = useState<{ text: string, answer: string, details?: string }[]>([]);
     const [winnerId, setWinnerId] = useState<string | null>(null);
 
     const [eliminated, setEliminated] = useState<Set<string>>(new Set());
@@ -25,12 +25,18 @@ export function MultiplayerGamePage() {
     const [showAbandonConfirm, setShowAbandonConfirm] = useState(false);
     const [askedQuestions, setAskedQuestions] = useState<Set<string>>(new Set());
 
-    // Estados para el chat
+    // Chat
     const [chatMessages, setChatMessages] = useState<{ userName: string, message: string, isMe: boolean }[]>([]);
     const [chatInput, setChatInput] = useState('');
     const chatEndRef = useRef<HTMLDivElement>(null);
 
-    // Auto-scroll al último mensaje del chat
+    // IA y Comodines
+    const [aiQuery, setAiQuery] = useState('');
+    const [aiLoading, setAiLoading] = useState(false);
+    const [hintsLeft, setHintsLeft] = useState(2);
+    const [currentHint, setCurrentHint] = useState<string | null>(null);
+
+    // Auto-scroll del chat
     useEffect(() => {
         chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [chatMessages]);
@@ -49,7 +55,6 @@ export function MultiplayerGamePage() {
                     setOpponentDisconnected(false);
                     if (res.eliminatedIds) setEliminated(new Set(res.eliminatedIds));
 
-                    // Cargar historial de chat si existe
                     if (res.chatHistory) {
                         setChatMessages(res.chatHistory.map((msg: any) => ({
                             userName: msg.user_name,
@@ -88,6 +93,24 @@ export function MultiplayerGamePage() {
             setIsMyTurn(true);
         });
 
+        // NUEVO: Resultados de IA en multijugador
+        socket.on('ai_question_result', (data: { freeText: string, answer: string, matchedIds: string[], filters: any }) => {
+            const filterText = Object.entries(data.filters || {}).map(([k, v]) => `${k}=${v}`).join(', ');
+            setLogs(prev => [...prev, { text: `✨ IA: ${data.freeText}`, answer: data.answer, details: filterText }]);
+            setEliminated(prev => {
+                const newSet = new Set(prev);
+                data.matchedIds.forEach(id => newSet.add(id));
+                return newSet;
+            });
+            setIsMyTurn(false);
+        });
+
+        socket.on('opponent_asked_ai', (data: { askerId: string, freeText: string, answer: string }) => {
+            if (data.askerId === user.id) return;
+            setLogs(prev => [...prev, { text: `Rival IA: ${data.freeText}`, answer: data.answer }]);
+            setIsMyTurn(true);
+        });
+
         socket.on('game_over', (data: { winnerId: string }) => {
             setWinnerId(data.winnerId);
             setConfirmCard(null);
@@ -117,6 +140,8 @@ export function MultiplayerGamePage() {
             socket.off('connect');
             socket.off('question_result');
             socket.off('opponent_asked');
+            socket.off('ai_question_result');
+            socket.off('opponent_asked_ai');
             socket.off('game_over');
             socket.off('wrong_guess');
             socket.off('opponent_disconnected');
@@ -136,6 +161,30 @@ export function MultiplayerGamePage() {
                 setIsMyTurn(true);
             } else {
                 setAskedQuestions(prev => new Set(prev).add(code));
+            }
+        });
+    };
+
+    const askAiMultiplayer = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!aiQuery.trim() || !isMyTurn || opponentDisconnected || winnerId) return;
+
+        setAiLoading(true);
+        socket.emit('ask_ai_question', { gameId, userId: user?.id, freeText: aiQuery }, (res: any) => {
+            if (!res.success) alert(res.error);
+            setAiLoading(false);
+            setAiQuery('');
+        });
+    };
+
+    const askHintMultiplayer = () => {
+        if (hintsLeft <= 0 || winnerId) return;
+        socket.emit('ask_hint', { gameId, userId: user?.id }, (res: any) => {
+            if (res.success) {
+                setCurrentHint(res.hint);
+                setHintsLeft(prev => prev - 1);
+            } else {
+                alert(res.error);
             }
         });
     };
@@ -187,6 +236,13 @@ export function MultiplayerGamePage() {
                     </div>
                 )}
 
+                {currentHint && (
+                    <div className="bg-amber-900/40 border border-amber-500/50 p-3 rounded-xl text-center mb-4 text-amber-200 flex items-center justify-center gap-4">
+                        <div>💡 <strong>Pista:</strong> {currentHint}</div>
+                        <button onClick={() => setCurrentHint(null)} className="text-xs text-amber-400 hover:text-white underline">Ocultar</button>
+                    </div>
+                )}
+
                 <div className="flex items-center justify-between bg-slate-900 p-4 rounded-xl border border-slate-800">
                     <div>
                         <h1 className="text-xl font-bold">Multijugador</h1>
@@ -212,7 +268,10 @@ export function MultiplayerGamePage() {
                         <div className="mb-4 flex gap-2">
                             {!winnerId && (
                                 !guessMode ? (
-                                    <button onClick={() => setGuessMode(true)} disabled={!isMyTurn || opponentDisconnected} className="bg-pink-600 hover:bg-pink-500 disabled:opacity-50 px-4 py-2 rounded-lg font-bold text-sm">🎯 Adivinar</button>
+                                    <>
+                                        <button onClick={() => setGuessMode(true)} disabled={!isMyTurn || opponentDisconnected} className="bg-pink-600 hover:bg-pink-500 disabled:opacity-50 px-4 py-2 rounded-lg font-bold text-sm">🎯 Adivinar</button>
+                                        <button onClick={askHintMultiplayer} disabled={hintsLeft <= 0 || !isMyTurn || opponentDisconnected} className="bg-amber-600 hover:bg-amber-500 disabled:opacity-50 px-4 py-2 rounded-lg font-bold text-sm text-white">💡 Comodín ({hintsLeft})</button>
+                                    </>
                                 ) : (
                                     <button onClick={() => setGuessMode(false)} className="bg-slate-700 px-4 py-2 rounded-lg text-sm">Cancelar</button>
                                 )
@@ -283,6 +342,7 @@ export function MultiplayerGamePage() {
                                 {logs.map((l, i) => (
                                     <li key={i} className="bg-slate-800 p-2 rounded border border-slate-700">
                                         <div className="text-slate-300 text-xs">{l.text}</div>
+                                        {l.details && <div className="text-[10px] text-purple-400 mt-0.5">Filtros: {l.details}</div>}
                                         <div className={`font-bold text-right text-xs mt-1 ${l.answer === 'yes' ? 'text-emerald-400' :
                                             l.answer === 'no' ? 'text-red-400' : 'text-slate-500'
                                             }`}>
@@ -293,12 +353,35 @@ export function MultiplayerGamePage() {
                             </ul>
                         </div>
 
+                        {/* PANEL DE IA EN MULTIJUGADOR */}
+                        <div className="bg-slate-900 rounded-xl border border-purple-500/30 p-3">
+                            <h3 className="text-xs font-bold text-purple-300 uppercase mb-2">✨ Preguntar a la IA</h3>
+                            <form onSubmit={askAiMultiplayer} className="flex gap-1">
+                                <input
+                                    type="text"
+                                    value={aiQuery}
+                                    onChange={e => setAiQuery(e.target.value)}
+                                    placeholder="Ej: ¿Es un villano?"
+                                    className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-white focus:border-purple-500 focus:outline-none"
+                                    disabled={!isMyTurn || opponentDisconnected || !!winnerId}
+                                />
+                                <button
+                                    type="submit"
+                                    disabled={!isMyTurn || aiLoading || opponentDisconnected || !!winnerId}
+                                    className="bg-purple-600 hover:bg-purple-500 disabled:opacity-50 px-3 py-1.5 rounded-lg text-xs font-bold transition"
+                                >
+                                    {aiLoading ? '...' : 'Enviar'}
+                                </button>
+                            </form>
+                        </div>
+
+                        {/* CHAT */}
                         <div className="bg-slate-900 rounded-xl border border-slate-800 flex flex-col h-64">
-                            <div className="p-3 border-b border-slate-800 bg-slate-900/50">
+                            <div className="p-2 border-b border-slate-800 bg-slate-900/50">
                                 <h3 className="text-sm font-bold text-slate-300">💬 Chat</h3>
                             </div>
 
-                            <div className="flex-1 overflow-y-auto p-3 space-y-2 text-xs">
+                            <div className="flex-1 overflow-y-auto p-2 space-y-2 text-xs">
                                 {chatMessages.length === 0 && (
                                     <div className="text-slate-500 italic text-center mt-4">No hay mensajes aún.</div>
                                 )}

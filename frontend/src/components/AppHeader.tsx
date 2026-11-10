@@ -1,9 +1,15 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../features/auth/AuthProvider';
+import { useEffect, useState } from 'react';
 
 export function AppHeader() {
     const { user, signOut } = useAuth();
     const nav = useNavigate();
+    const [isDark, setIsDark] = useState(true);
+
+    useEffect(() => {
+        document.documentElement.classList.toggle('dark', isDark);
+    }, [isDark]);
 
     const handleLogout = async () => {
         await signOut();
@@ -17,6 +23,9 @@ export function AppHeader() {
             </Link>
 
             <div className="flex gap-3 items-center">
+                <button onClick={() => setIsDark(!isDark)} className="text-xl">
+                    {isDark ? '☀️' : '🌙'}
+                </button>
                 {user ? (
                     <>
                         <Link to="/leaderboard" className="text-sm font-semibold bg-amber-600/20 text-amber-300 hover:bg-amber-600/40 px-3 py-1.5 rounded-lg border border-amber-500/30 transition flex items-center gap-1">

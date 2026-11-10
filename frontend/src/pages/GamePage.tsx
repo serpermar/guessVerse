@@ -66,6 +66,12 @@ export function GamePage() {
     const [confirmCard, setConfirmCard] = useState<CharacterCard | null>(null);
     const [aiQuery, setAiQuery] = useState('');
     const [aiLoading, setAiLoading] = useState(false);
+
+    // Estados para los comodines
+    const [hintsLeft, setHintsLeft] = useState(2);
+    const [currentHint, setCurrentHint] = useState<string | null>(null);
+    const [hintLoading, setHintLoading] = useState(false);
+
     const startedRef = useRef(false);
 
     useEffect(() => {
@@ -135,14 +141,18 @@ export function GamePage() {
                 return;
             }
 
-            // Actualizar tablero e historial con la respuesta de la IA
             const elim = new Set(eliminated);
             res.matchedIds.forEach(id => elim.add(id));
+
+            const filterText = Object.entries(res.filters || {})
+                .map(([k, v]) => `${k}=${v}`)
+                .join(', ');
 
             const answerLabel = res.answer === 'yes' ? '✅ Sí' : '❌ No';
             const logs = [...useGameStore.getState().logs, {
                 question: `✨ IA: ${aiQuery}`,
                 answer: answerLabel,
+                details: filterText
             }];
 
             const isDead = elim.size >= board.length;
@@ -157,6 +167,20 @@ export function GamePage() {
             alert('Error con la IA: ' + (err as Error).message);
         } finally {
             setAiLoading(false);
+        }
+    };
+
+    const askHint = async () => {
+        if (hintsLeft <= 0 || !gameId || status !== 'playing') return;
+        setHintLoading(true);
+        try {
+            const res = await api.getHint(gameId);
+            setCurrentHint(res.hint);
+            setHintsLeft(prev => prev - 1);
+        } catch (err) {
+            alert('Error obteniendo pista: ' + (err as Error).message);
+        } finally {
+            setHintLoading(false);
         }
     };
 
@@ -195,15 +219,32 @@ export function GamePage() {
                 </div>
             )}
 
+            {/* Panel de Pista */}
+            {currentHint && (
+                <div className="bg-amber-900/40 border border-amber-500/50 p-3 rounded-xl text-center mb-4 text-amber-200 flex items-center justify-center gap-4">
+                    <div>💡 <strong>Pista:</strong> {currentHint}</div>
+                    <button onClick={() => setCurrentHint(null)} className="text-xs text-amber-400 hover:text-white underline">Ocultar</button>
+                </div>
+            )}
+
             <div className="grid gap-4 lg:grid-cols-[1fr_300px]">
                 <section>
                     <div className="mb-3 flex items-center justify-between gap-2">
                         <div className="text-sm text-muted">{guessMode ? 'Selecciona la carta secreta' : 'Clic para descartar/restaurar'}</div>
-                        {!guessMode ? (
-                            <button onClick={() => setGuessMode(true)} disabled={status !== 'playing'} className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-40">🎯 Adivinar</button>
-                        ) : (
-                            <button onClick={() => setGuessMode(false)} className="rounded-lg border border-border bg-surface-2 px-4 py-2 text-sm transition hover:bg-surface">Cancelar</button>
-                        )}
+                        <div className="flex gap-2">
+                            <button
+                                onClick={askHint}
+                                disabled={hintsLeft <= 0 || hintLoading || status !== 'playing'}
+                                className="rounded-lg bg-amber-600 hover:bg-amber-500 disabled:opacity-50 px-4 py-2 text-sm font-semibold text-white transition"
+                            >
+                                {hintLoading ? '...' : `💡 Comodín (${hintsLeft})`}
+                            </button>
+                            {!guessMode ? (
+                                <button onClick={() => setGuessMode(true)} disabled={status !== 'playing'} className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-40">🎯 Adivinar</button>
+                            ) : (
+                                <button onClick={() => setGuessMode(false)} className="rounded-lg border border-border bg-surface-2 px-4 py-2 text-sm transition hover:bg-surface">Cancelar</button>
+                            )}
+                        </div>
                     </div>
 
                     {/* TABLERO CON ANIMACIONES */}
@@ -244,7 +285,7 @@ export function GamePage() {
                 </section>
 
                 <aside className="space-y-4">
-                    {/* NUEVO PANEL DE IA */}
+                    {/* PANEL DE IA */}
                     <div className="rounded-2xl border border-purple-500/40 bg-purple-900/10 p-4">
                         <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-purple-300">
                             ✨ Preguntar a la IA
@@ -299,9 +340,12 @@ export function GamePage() {
                         <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted">Historial</h3>
                         <ul className="max-h-72 space-y-1.5 overflow-y-auto text-sm">
                             {logs.map((l, i) => (
-                                <li key={i} className="flex justify-between gap-2 rounded-lg bg-surface-2 p-2 animate-pop-in">
-                                    <span>{l.question}</span>
-                                    <span className="whitespace-nowrap">{l.answer}</span>
+                                <li key={i} className="bg-slate-800 p-2 rounded border border-slate-700">
+                                    <div className="text-slate-300 text-xs">{l.question}</div>
+                                    {l.details && <div className="text-[10px] text-purple-400 mt-1">Filtros: {l.details}</div>}
+                                    <div className={`font-bold text-right text-xs mt-1 ${l.answer === '✅ Sí' ? 'text-emerald-400' : l.answer === '❌ No' ? 'text-red-400' : 'text-slate-500'}`}>
+                                        {l.answer}
+                                    </div>
                                 </li>
                             ))}
                         </ul>

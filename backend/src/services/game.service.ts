@@ -1,15 +1,7 @@
 import { supabaseAdmin } from '../db/supabase.js';
 import { HttpError } from '../utils/http-error.js';
 import { recordGameResult } from './stats.service.js';
-import {
-    evaluate,
-    clampBoardSize,
-    shuffle,
-    BOARD_SIZE_MIN,
-    BOARD_SIZE_MAX,
-    BOARD_SIZE_DEFAULT,
-    type Answer,
-} from './game.rules.js';
+import { evaluate, clampBoardSize, shuffle, BOARD_SIZE_MIN, BOARD_SIZE_MAX, BOARD_SIZE_DEFAULT, type Answer } from './game.rules.js';
 
 export { evaluate, clampBoardSize, BOARD_SIZE_MIN, BOARD_SIZE_MAX, BOARD_SIZE_DEFAULT };
 export type { Answer };
@@ -80,12 +72,7 @@ export async function askQuestion(gameId: string, questionCode: string, userId: 
     const answer = evaluate(secretValue, question.operator, expected);
 
     if (answer === 'unknown') {
-        return {
-            question: { code: question.code, text: question.text_es },
-            answer: 'unknown' as const,
-            matches: { yes: [], no: [], unknown: [] },
-            message: 'Esa pregunta no aplica a esta temática. Prueba con otra.'
-        };
+        return { question: { code: question.code, text: question.text_es }, answer: 'unknown' as const, matches: { yes: [], no: [], unknown: [] }, message: 'Esa pregunta no aplica a esta temática. Prueba con otra.' };
     }
 
     const { data: boardRows } = await supabaseAdmin.from('game_characters').select('character_id, characters(id, name, image_url, gender, is_human, is_hero, is_villain, is_protagonist, has_powers, uses_weapon, species, attributes)').eq('game_id', gameId);
@@ -103,7 +90,6 @@ export async function askQuestion(gameId: string, questionCode: string, userId: 
     }
 
     await supabaseAdmin.from('game_questions').insert({ game_id: gameId, question_id: question.id || null, answer });
-
     return { question: { code: question.code, text: question.text_es }, answer, matches: { yes, no, unknown } };
 }
 
@@ -127,7 +113,6 @@ export async function guessCharacter(gameId: string, characterId: string, userId
         const { data: secret } = await supabaseAdmin.from('characters').select('id, name, image_url').eq('id', game.secret_character_id).single();
         return { correct: true, status: 'won' as const, secret };
     }
-
     return { correct: false, status: 'playing' as const };
 }
 
@@ -152,4 +137,55 @@ export async function getGame(gameId: string, userId: string) {
 
     const { data: board } = await supabaseAdmin.from('game_characters').select('character_id, is_eliminated, characters(id, name, image_url)').eq('game_id', gameId);
     return { game, board: board ?? [] };
+}
+
+// NUEVO: Obtener una pista del personaje secreto
+export async function getHint(gameId: string, userId: string) {
+    const { data: game } = await supabaseAdmin
+        .from('games')
+        .select('secret_character_id, created_by, mode')
+        .eq('id', gameId)
+        .single();
+
+    if (!game) throw HttpError.notFound('Partida no encontrada');
+
+    // En individual: solo el creador. En multijugador: cualquier jugador.
+    if (game.mode === 'classic' && game.created_by !== userId) {
+        throw HttpError.forbidden('No eres el dueño de esta partida');
+    }
+    if (game.mode === 'multiplayer') {
+        const { data: player } = await supabaseAdmin
+            .from('game_players')
+            .select('user_id')
+            .eq('game_id', gameId)
+            .eq('user_id', userId)
+            .maybeSingle();
+        if (!player) throw HttpError.forbidden('No eres jugador de esta partida');
+    }
+
+    const { data: secret } = await supabaseAdmin
+        .from('characters')
+        .select('name, species, gender, is_hero, is_villain, attributes')
+        .eq('id', game.secret_character_id)
+        .single();
+    if (!secret) throw new Error('Personaje secreto no encontrado');
+
+    const hints: string[] = [];
+    if (secret.species) hints.push(`Es de especie: ${secret.species}`);
+    if (secret.gender) hints.push(`Es de género: ${secret.gender === 'male' ? 'Hombre' : secret.gender === 'female' ? 'Mujer' : secret.gender}`);
+    if (secret.is_hero) hints.push('Es un héroe');
+    if (secret.is_villain) hints.push('Es un villano');
+
+    if (secret.attributes) {
+        for (const [k, v] of Object.entries(secret.attributes)) {
+            if (v !== null && v !== undefined && k !== 'species') {
+                hints.push(`Atributo ${k}: ${v}`);
+            }
+        }
+    }
+
+    if (hints.length === 0) return { hint: 'No hay pistas disponibles para este personaje.' };
+
+    const randomHint = hints[Math.floor(Math.random() * hints.length)];
+    return { hint: randomHint };
 }

@@ -213,4 +213,7 @@ export const api = {
         }).then(r => r.data),
 
     deleteTheme: (slug: string) => req<{ ok: boolean }>(`/api/themes/${slug}`, { method: 'DELETE' }),
+
+    getHint: (gameId: string) =>
+        req<{ hint: string }>(`/api/games/${gameId}/hint`, { method: 'POST' }),
 };

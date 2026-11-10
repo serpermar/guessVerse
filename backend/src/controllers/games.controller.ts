@@ -5,6 +5,7 @@ import { createGame, askQuestion, guessCharacter, abandonGame, getGame } from '.
 import { askAiFree } from '../services/ai.service.js';
 import { supabaseAdmin } from '../db/supabase.js';
 import { HttpError } from '../utils/http-error.js';
+import { getHint } from '../services/game.service.js';
 
 const createSchema = z.object({
     themeSlug: z.string().min(1),
@@ -82,8 +83,16 @@ export async function postAskFree(req: Request<{ id: string }>, res: Response, n
             game_id: req.params.id,
             free_text: freeText,
             answer: result.answer,
+            raw_data: { filters: result.filters }
         });
 
+        res.json(result);
+    } catch (err) { next(err); }
+}
+
+export async function postHint(req: Request<{ id: string }>, res: Response, next: NextFunction) {
+    try {
+        const result = await getHint(req.params.id, req.user!.id);
         res.json(result);
     } catch (err) { next(err); }
 }

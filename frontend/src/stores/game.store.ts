@@ -13,7 +13,7 @@ interface GameState {
   secret: CharacterCard | null;
   loading: boolean;
   error: string | null;
-  logs: { question: string; answer: string }[];
+  logs: { question: string; answer: string; details?: string }[]; // <-- details añadido
   timeLeft: number | null;
 
   startGame: (themeSlug: string, boardSize?: number, timeLimit?: number) => Promise<void>;
@@ -90,17 +90,11 @@ export const useGameStore = create<GameState>((set, get) => ({
     if (!gameId || status !== 'playing') return;
     try {
       const res = await api.askQuestion(gameId, code);
-
-      if (res.answer === 'unknown') {
-        set({ error: (res as any).message || 'Pregunta no válida para esta temática.' });
-        return;
-      }
-
       const elim = new Set(get().eliminated);
       if (res.answer === 'yes') res.matches.no.forEach((id) => elim.add(id));
       else if (res.answer === 'no') res.matches.yes.forEach((id) => elim.add(id));
 
-      const logAnswer = res.answer === 'yes' ? '✅ Sí' : '❌ No';
+      const logAnswer = res.answer === 'yes' ? '✅ Sí' : res.answer === 'no' ? '❌ No' : '❓ Desconocido';
       const logs = [...get().logs, { question: text, answer: logAnswer }];
       const isDead = elim.size >= get().board.length;
 
