@@ -29,7 +29,10 @@ export function RegisterPage() {
     return (
         <div className="flex min-h-[calc(100vh-64px)] items-center justify-center bg-canvas px-4 text-fg">
             <form onSubmit={onSubmit} className="w-full max-w-sm space-y-3 rounded-xl border border-border bg-surface p-6 shadow-lg">
-                <h1 className="text-2xl font-bold">Crear cuenta</h1>
+                <div className="flex flex-col items-center gap-2 pb-1">
+                    <img src="/icon-192.png" alt="guessVerse" className="h-14 w-14 rounded-2xl ring-1 ring-brand/40" />
+                    <h1 className="text-2xl font-bold">Crear cuenta</h1>
+                </div>
                 <input
                     className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-fg placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-brand/60"
                     placeholder="username"
@@ -60,7 +63,7 @@ export function RegisterPage() {
                 {msg && <p className="text-sm text-emerald-500">{msg}</p>}
                 <button
                     disabled={loading}
-                    className="w-full rounded-lg bg-brand-strong px-3 py-2 font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+                    className="w-full rounded-lg bg-brand-gradient px-3 py-2 font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
                 >
                     {loading ? 'Registrando...' : 'Registrarme'}
                 </button>

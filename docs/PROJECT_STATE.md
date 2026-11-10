@@ -73,6 +73,14 @@ Juego web de deducción tipo «¿Quién es quién?» con personajes de cultura p
 
 - No se usa Docker (restricción del proyecto).
 
+### 2.7. 🎨 Identidad visual
+
+- **Nombre:** guessVerse · **Estilo:** moderno, tecnológico y divertido.
+- **Paleta:** violeta `#762BFF`, rosa `#F02C9B`, naranja `#FF9A35`, azul noche `#08091F`, blanco `#FFFFFF` y gris claro `#B8B8CC`.
+- **Tipografía:** `Nunito` (sans-serif redondeada y moderna).
+- **Recursos:** logo, favicons e iconos PWA en `frontend/public/`.
+- **Documentación:** `docs/BRANDING.md`.
+
 ---
 
 ## 3. 🗂️ Estructura de carpetas
@@ -139,6 +147,7 @@ guessverse/
 │   └── package.json
 ├── docs/
 │   ├── PROJECT_STATE.md
+│   ├── BRANDING.md
 │   ├── auth.md
 │   └── CHANGELOG.md
 ├── .env.example

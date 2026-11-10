@@ -14,7 +14,7 @@ const THEME_GRADIENT: Record<string, string> = {
 };
 
 function themeEmoji(slug: string) { return THEME_EMOJI[slug] ?? '🎮'; }
-function themeGradient(slug: string) { return THEME_GRADIENT[slug] ?? 'from-purple-600/80 to-pink-600/80'; }
+function themeGradient(slug: string) { return THEME_GRADIENT[slug] ?? 'from-brand/80 to-accent/80'; }
 
 function getTypeBadge(type: string) {
     const map: Record<string, { label: string, icon: string, color: string }> = {
@@ -58,20 +58,24 @@ export function HomePage() {
 
     return (
         <main className="mx-auto max-w-5xl px-4 py-10 animate-fade-in">
-            <h1 className="text-center text-5xl font-black tracking-tight bg-gradient-to-r from-purple-400 to-pink-500 bg-clip-text text-transparent">
-                GuessVerse
-            </h1>
-            <p className="mt-2 text-center text-slate-400">Adivina el personaje secreto</p>
+            <div className="flex flex-col items-center">
+                <img
+                    src="/guessverse-logo-dark.png"
+                    alt="guessVerse — Adivina el personaje secreto"
+                    className="w-full max-w-md rounded-3xl shadow-2xl shadow-brand/20 ring-1 ring-brand/20"
+                />
+                <p className="mt-5 text-center text-muted">Adivina el personaje secreto</p>
+            </div>
 
             {saved && (
-                <div className="mx-auto mb-8 mt-8 flex max-w-3xl items-center justify-between gap-4 rounded-2xl border border-purple-500/40 bg-purple-500/10 p-4 animate-pop-in">
+                <div className="mx-auto mb-8 mt-8 flex max-w-3xl items-center justify-between gap-4 rounded-2xl border border-brand/40 bg-brand/10 p-4 animate-pop-in">
                     <div>
-                        <div className="text-xs font-semibold uppercase tracking-wide text-purple-400">Partida en curso</div>
-                        <div className="text-lg font-bold text-white">{saved.theme.name}</div>
+                        <div className="text-xs font-semibold uppercase tracking-wide text-brand">Partida en curso</div>
+                        <div className="text-lg font-bold text-fg">{saved.theme.name}</div>
                     </div>
                     <div className="flex gap-2">
-                        <button onClick={() => nav(`/game/${saved.theme.slug}`)} className="rounded-lg bg-purple-600 px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90">Continuar</button>
-                        <button onClick={() => { localStorage.removeItem('guessverse:current-game'); setSaved(null); }} className="rounded-lg border border-slate-700 bg-slate-800 px-4 py-2 text-sm text-slate-300 transition hover:text-white">Descartar</button>
+                        <button onClick={() => nav(`/game/${saved.theme.slug}`)} className="rounded-lg bg-brand-gradient px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90">Continuar</button>
+                        <button onClick={() => { localStorage.removeItem('guessverse:current-game'); setSaved(null); }} className="rounded-lg border border-border bg-surface-2 px-4 py-2 text-sm text-muted transition hover:text-fg">Descartar</button>
                     </div>
                 </div>
             )}
@@ -79,24 +83,24 @@ export function HomePage() {
             <div className="mx-auto mt-8 max-w-3xl">
                 <input
                     type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="🔍 Buscar temática..."
-                    className="w-full rounded-xl border border-slate-700 bg-slate-800 px-4 py-3 text-white placeholder-slate-500 focus:border-purple-500 focus:outline-none"
+                    className="w-full rounded-xl border border-border bg-surface-2 px-4 py-3 text-fg placeholder:text-muted focus:border-brand focus:outline-none"
                 />
             </div>
 
-            {loading && <p className="mt-10 text-center text-slate-400">Cargando temáticas…</p>}
+            {loading && <p className="mt-10 text-center text-muted">Cargando temáticas…</p>}
 
             {error && (
                 <div className="mt-10 text-center text-red-500">
                     <p className="mb-2">No se pudieron cargar las temáticas.</p>
-                    <button onClick={loadThemes} className="rounded-lg border border-slate-700 bg-slate-800 px-4 py-2 text-sm text-white transition hover:bg-slate-700">Reintentar</button>
+                    <button onClick={loadThemes} className="rounded-lg border border-border bg-surface-2 px-4 py-2 text-sm text-fg transition hover:bg-surface">Reintentar</button>
                 </div>
             )}
 
             {!loading && !error && filteredThemes.length === 0 && themes.length > 0 && (
-                <div className="mt-10 text-center text-slate-500">
+                <div className="mt-10 text-center text-muted">
                     <p>No hay temáticas que coincidan con "{search}".</p>
                     <p className="mt-2 text-sm">
-                        ¿No la encuentras? Ve a <Link to="/discover" className="text-purple-400 underline hover:text-purple-300">Descubrir</Link> para importarla desde TMDB o AniList.
+                        ¿No la encuentras? Ve a <Link to="/discover" className="text-brand underline hover:opacity-80">Descubrir</Link> para importarla desde TMDB o AniList.
                     </p>
                 </div>
             )}
@@ -109,7 +113,7 @@ export function HomePage() {
                             key={t.id}
                             onClick={() => { reset(); nav(`/themes/${t.slug}`); }}
                             style={{ animationDelay: `${i * 40}ms` }}
-                            className="group flex animate-pop-in flex-col gap-3 overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 p-4 text-left transition hover:-translate-y-1 hover:border-purple-500/60 hover:shadow-lg hover:shadow-purple-500/10"
+                            className="group flex animate-pop-in flex-col gap-3 overflow-hidden rounded-2xl border border-border bg-surface p-4 text-left transition hover:-translate-y-1 hover:border-brand/60 hover:shadow-lg hover:shadow-brand/10"
                         >
                             <div className={`relative flex h-36 items-center justify-center rounded-xl bg-gradient-to-br ${themeGradient(t.slug)}`}>
                                 {t.image_url ? (
@@ -119,11 +123,11 @@ export function HomePage() {
                                 )}
                             </div>
                             <div>
-                                <div className="text-xl font-bold text-white">{t.name}</div>
+                                <div className="text-xl font-bold text-fg">{t.name}</div>
                                 <div className="mt-2 flex items-center gap-2">
                                     <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border ${badge.color}`}>{badge.icon} {badge.label}</span>
                                 </div>
-                                <div className="mt-2 text-sm text-slate-400 line-clamp-2">{t.description}</div>
+                                <div className="mt-2 text-sm text-muted line-clamp-2">{t.description}</div>
                             </div>
                         </button>
                     );

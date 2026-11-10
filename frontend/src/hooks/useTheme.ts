@@ -11,8 +11,9 @@ function prefersDark() {
 function applyMode(mode: ThemeMode) {
     const dark = mode === 'dark' || (mode === 'system' && prefersDark());
     document.documentElement.classList.toggle('dark', dark);
+    document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
     const meta = document.querySelector('meta[name="theme-color"]');
-    meta?.setAttribute('content', dark ? '#020617' : '#f8fafc');
+    meta?.setAttribute('content', dark ? '#08091F' : '#F8FAFC');
 }
 
 function readMode(): ThemeMode {

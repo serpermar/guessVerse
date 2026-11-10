@@ -1,0 +1,26 @@
+{
+  "name": "guessVerse — Adivina el personaje secreto",
+  "short_name": "guessVerse",
+  "description": "Juego de deducción con tus personajes favoritos: modo individual, multijugador 1v1 y preguntas personalizadas.",
+  "lang": "es",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#08091F",
+  "theme_color": "#08091F",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

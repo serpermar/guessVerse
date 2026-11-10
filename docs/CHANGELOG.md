@@ -4,6 +4,25 @@ Historial de cambios agrupados por sesión de trabajo.
 
 ---
 
+## 🎨 [Sin publicar] — 2026-11-10 — Identidad visual y branding
+
+### ➕ Añadido
+- Logo, favicon vectorial, favicon `.ico` e iconos PWA (192/512) en `frontend/public/`.
+- `site.webmanifest` con nombre, colores e iconos de la aplicación.
+- `docs/BRANDING.md` con la identidad, paleta, recursos e implementación.
+- Metadatos Open Graph/Twitter y tipografía `Nunito` en `frontend/index.html`.
+
+### 🔄 Cambiado
+- Paleta global (`frontend/src/index.css`): violeta, rosa, naranja y azul noche como tokens de Tailwind.
+- `AppHeader`, `HomePage`, `LoginPage` y `RegisterPage` adoptan el logo y los colores de marca.
+- `useTheme` sincroniza `theme-color` con la paleta y `color-scheme`.
+- README y `PROJECT_STATE.md` actualizados con la sección de identidad visual.
+
+### 🐛 Corregido
+- El toggle de tema del header usa `useTheme` (persistencia y modo sistema) en lugar de estado local.
+
+---
+
 ## 🚧 [Sin publicar] — 2026-11-05 — Bloque 3: Multijugador 1v1 y preguntas personalizadas
 
 ### ➕ Añadido

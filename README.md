@@ -1,5 +1,7 @@
 # 🎯 GuessVerse
 
+<img src="frontend/public/guessverse-logo-dark.png" alt="guessVerse — Adivina el personaje secreto" width="360" />
+
 Juego web de deducción inspirado en **¿Quién es quién?**, en el que puedes descubrir personajes de la cultura popular mediante preguntas y pistas.
 
 - 🎭 **5 temáticas base:** Marvel, Star Wars, Pokémon, Harry Potter y DC Comics.
@@ -23,6 +25,30 @@ Juego web de deducción inspirado en **¿Quién es quién?**, en el que puedes d
 - **🔐 Autenticación:** Supabase Auth (email + password + verificación).
 - **🧪 Testing:** Vitest en el backend.
 - **🌐 Fuentes de datos:** TMDB, AniList, PokeAPI, SuperHero API (akabab), akabab/starwars-api, HP-API, Wikidata, Wikipedia y Fandom.
+
+---
+
+## 🎨 Identidad visual
+
+- **Nombre:** guessVerse
+- **Estilo:** moderno, tecnológico y divertido.
+- **Símbolo:** carta misteriosa con interrogante.
+- **Tipografía:** sans-serif redondeada y moderna (`Nunito`).
+
+| Color | Código | Uso |
+|---|---|---|
+| 🟣 Violeta | `#762BFF` | Color principal |
+| 🩷 Rosa | `#F02C9B` | Acentos |
+| 🟠 Naranja | `#FF9A35` | Degradados |
+| 🌌 Azul noche | `#08091F` | Fondos |
+| ⚪ Blanco | `#FFFFFF` | Textos |
+| 🌫️ Gris claro | `#B8B8CC` | Textos secundarios |
+
+```css
+linear-gradient(100deg, #762BFF 0%, #F02C9B 55%, #FF9A35 100%);
+```
+
+Los logos, favicons e iconos PWA viven en `frontend/public/`. Consulta [`docs/BRANDING.md`](docs/BRANDING.md) para el detalle completo.
 
 ---
 
@@ -319,6 +345,7 @@ Frontend y backend deben desplegarse en servicios accesibles por HTTPS (ej. Verc
 ## 📚 Documentación
 
 - [`docs/PROJECT_STATE.md`](docs/PROJECT_STATE.md) — estado, stack, esquema y roadmap.
+- [`docs/BRANDING.md`](docs/BRANDING.md) — identidad visual, paleta y recursos gráficos.
 - [`docs/auth.md`](docs/auth.md) — flujo de autenticación y seguridad.
 - [`docs/CHANGELOG.md`](docs/CHANGELOG.md) — historial de cambios por bloque.
 
