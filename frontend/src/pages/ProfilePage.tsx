@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useAuth } from '../features/auth/AuthProvider';
+import { useAuth } from '../features/auth/auth-context';
 import { api, type UserProfile, type UserStats, type GameHistoryItem } from '../services/api';
+import { levelProgress } from '../lib/xp';
 
 export function ProfilePage() {
     const { user, signOut } = useAuth();
@@ -55,25 +56,35 @@ export function ProfilePage() {
             </div>
 
             {/* BARRA DE NIVEL Y XP */}
-            {profile && (
-                <div className="bg-slate-800 p-6 rounded-xl border border-slate-700">
-                    <div className="flex justify-between items-end mb-2">
-                        <div>
-                            <span className="text-sm text-slate-400">Nivel</span>
-                            <div className="text-3xl font-black text-purple-400">{profile.level || 1}</div>
+            {profile && (() => {
+                const progress = levelProgress(profile.xp ?? 0);
+                return (
+                    <div className="rounded-xl border border-border bg-surface p-6">
+                        <div className="mb-2 flex items-end justify-between">
+                            <div>
+                                <span className="text-sm text-muted">Nivel</span>
+                                <div className="text-3xl font-black text-brand">{progress.level}</div>
+                            </div>
+                            <div className="text-sm text-muted">
+                                {progress.progressXp} / {progress.levelSpan} XP · faltan {progress.remainingXp} para el nivel {progress.level + 1}
+                            </div>
                         </div>
-                        <div className="text-sm text-slate-400">
-                            {(profile.xp || 0) % 100} / 100 XP para el siguiente nivel
-                        </div>
-                    </div>
-                    <div className="w-full bg-slate-900 rounded-full h-4 overflow-hidden">
                         <div
-                            className="bg-gradient-to-r from-purple-500 to-pink-500 h-full rounded-full transition-all duration-1000"
-                            style={{ width: `${((profile.xp || 0) % 100)}%` }}
-                        />
+                            className="h-4 w-full overflow-hidden rounded-full bg-surface-2"
+                            role="progressbar"
+                            aria-valuemin={0}
+                            aria-valuemax={100}
+                            aria-valuenow={progress.percent}
+                            aria-label="Progreso de nivel"
+                        >
+                            <div
+                                className="h-full rounded-full bg-brand-gradient transition-all duration-1000"
+                                style={{ width: `${progress.percent}%` }}
+                            />
+                        </div>
                     </div>
-                </div>
-            )}
+                );
+            })()}
 
             <section className="grid grid-cols-2 gap-3 sm:grid-cols-5">
                 <StatCard label="Jugadas" value={stats?.games_played ?? 0} />

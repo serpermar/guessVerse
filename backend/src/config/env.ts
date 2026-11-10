@@ -44,4 +44,8 @@ export const env = {
     fanart: {
         apiKey: required('FANART_API_KEY'),
     },
+    /** Clave de Groq para las preguntas libres. Opcional: sin ella la IA se desactiva. */
+    groqApiKey: process.env.GROQ_API_KEY?.trim() || null,
+    /** Segundos que se espera a que un jugador se reconecte antes de dar la partida por perdida. */
+    disconnectGraceMs: Number(process.env.DISCONNECT_GRACE_MS) || 30_000,
 } as const;

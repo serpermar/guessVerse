@@ -1,8 +1,10 @@
 // frontend/src/services/api.ts
+import { supabase } from '../lib/supabase';
+
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
-    const { data: { session } } = await import('./../lib/supabase').then(m => m.supabase.auth.getSession());
+    const { data: { session } } = await supabase.auth.getSession();
 
     const headers: Record<string, string> = {
         'Content-Type': 'application/json',
@@ -53,7 +55,8 @@ export interface AskResponse {
 export interface AskAiResponse {
     answer: 'yes' | 'no' | 'unknown';
     matchedIds: string[];
-    filters: Record<string, unknown>;
+    filters: Record<string, string | number | boolean>;
+    message?: string;
 }
 
 export interface GuessResponse {
@@ -112,7 +115,7 @@ export interface CharacterDetail {
     is_protagonist: boolean | null;
     has_powers: boolean | null;
     uses_weapon: boolean | null;
-    attributes?: Record<string, any>;
+    attributes?: Record<string, string | number | boolean | null>;
 }
 
 export interface ThemeDetail {
@@ -155,7 +158,7 @@ export interface HintResponse {
 export interface GameDetailResponse {
     game: {
         id: string;
-        status: 'waiting' | 'playing' | 'won' | 'lost';
+        status: 'waiting' | 'playing' | 'won' | 'lost' | 'abandoned';
         theme_id: string;
         created_by: string;
         started_at: string | null;
@@ -212,7 +215,7 @@ export const api = {
             body: JSON.stringify({ characterId }),
         }),
 
-    abandon: (gameId: string) => req<{ status: 'lost' }>(`/api/games/${gameId}/abandon`, { method: 'POST' }),
+    abandon: (gameId: string) => req<{ status: 'abandoned' }>(`/api/games/${gameId}/abandon`, { method: 'POST' }),
 
     me: () => req<{ data: UserProfile }>('/api/users/me').then((r) => r.data),
 

@@ -18,12 +18,12 @@ function themeGradient(slug: string) { return THEME_GRADIENT[slug] ?? 'from-bran
 
 function getTypeBadge(type: string) {
     const map: Record<string, { label: string, icon: string, color: string }> = {
-        'movies': { label: 'Películas', icon: '🎬', color: 'bg-blue-900/60 text-blue-300 border-blue-700/50' },
-        'series': { label: 'Series', icon: '📺', color: 'bg-orange-900/60 text-orange-300 border-orange-700/50' },
-        'anime': { label: 'Anime', icon: '🎌', color: 'bg-pink-900/60 text-pink-300 border-pink-700/50' },
-        'superheroes': { label: 'Superhéroes', icon: '🦸', color: 'bg-red-900/60 text-red-300 border-red-700/50' },
-        'videogames': { label: 'Videojuegos', icon: '🎮', color: 'bg-emerald-900/60 text-emerald-300 border-emerald-700/50' },
-        'default': { label: 'Varios', icon: '📦', color: 'bg-slate-800 text-slate-300 border-slate-700' },
+        'movies': { label: 'Películas', icon: '🎬', color: 'bg-blue-500/10 text-blue-600 dark:text-blue-300 border-blue-500/30' },
+        'series': { label: 'Series', icon: '📺', color: 'bg-orange-500/10 text-orange-600 dark:text-orange-300 border-orange-500/30' },
+        'anime': { label: 'Anime', icon: '🎌', color: 'bg-pink-500/10 text-pink-600 dark:text-pink-300 border-pink-500/30' },
+        'superheroes': { label: 'Superhéroes', icon: '🦸', color: 'bg-red-500/10 text-red-600 dark:text-red-300 border-red-500/30' },
+        'videogames': { label: 'Videojuegos', icon: '🎮', color: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-300 border-emerald-500/30' },
+        'default': { label: 'Varios', icon: '📦', color: 'bg-surface-2 text-muted border-border' },
     };
     return map[type] || map['default'];
 }

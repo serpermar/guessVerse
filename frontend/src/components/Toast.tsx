@@ -12,9 +12,9 @@ interface ToastProps {
 }
 
 const KIND_STYLES: Record<ToastKind, string> = {
-    info: 'bg-slate-800 text-white border-slate-600',
-    success: 'bg-emerald-700 text-white border-emerald-500',
-    error: 'bg-rose-700 text-white border-rose-500',
+    info: 'bg-surface text-fg border-border',
+    success: 'bg-emerald-600 text-white border-emerald-500',
+    error: 'bg-rose-600 text-white border-rose-500',
 };
 
 export function Toast({
@@ -45,7 +45,7 @@ export function Toast({
                         <span className="text-sm">{message}</span>
                         <button
                             onClick={onClose}
-                            className="text-white/70 hover:text-white text-xs"
+                            className="text-xs opacity-70 transition hover:opacity-100"
                             aria-label="Cerrar notificación"
                         >
                             ✕

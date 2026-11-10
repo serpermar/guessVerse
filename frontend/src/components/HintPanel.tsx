@@ -19,20 +19,20 @@ export function HintPanel() {
     const disabled = hintLoading || outOfHints;
 
     return (
-        <section className="w-full max-w-md mx-auto bg-slate-900/60 border border-slate-700 rounded-2xl p-4">
-            <header className="flex items-center justify-between mb-3">
+        <section className="mx-auto w-full max-w-md rounded-2xl border border-border bg-surface p-4">
+            <header className="mb-3 flex items-center justify-between">
                 <div>
-                    <h3 className="text-white font-semibold">Comodín</h3>
-                    <p className="text-xs text-slate-400">
+                    <h3 className="font-semibold text-fg">Comodín</h3>
+                    <p className="text-xs text-muted">
                         Pistas usadas: {hintsUsed}/{maxHints}
                     </p>
                 </div>
 
                 <div className="flex items-center gap-2">
                     <span
-                        className={`text-xs font-bold px-2 py-1 rounded-full border ${outOfHints
-                                ? 'bg-slate-700 text-slate-400 border-slate-600'
-                                : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                        className={`rounded-full border px-2 py-1 text-xs font-bold ${outOfHints
+                                ? 'border-border bg-surface-2 text-muted'
+                                : 'border-amber-500/40 bg-amber-500/20 text-amber-600 dark:text-amber-300'
                             }`}
                         aria-label={`${hintsLeft} pistas restantes`}
                     >
@@ -43,7 +43,7 @@ export function HintPanel() {
                         <button
                             type="button"
                             onClick={() => setShowHistory((v) => !v)}
-                            className="text-xs text-slate-300 hover:text-white underline-offset-2 hover:underline"
+                            className="text-xs text-muted underline-offset-2 hover:text-fg hover:underline"
                         >
                             {showHistory ? 'Ocultar' : 'Historial'}
                         </button>
@@ -56,9 +56,9 @@ export function HintPanel() {
                 onClick={() => requestHint()}
                 disabled={disabled}
                 title={outOfHints ? 'No te quedan pistas en esta partida' : 'Revelar una pista'}
-                className={`w-full py-2.5 rounded-xl font-semibold transition ${disabled
-                        ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
-                        : 'bg-amber-500 hover:bg-amber-400 text-slate-900'
+                className={`w-full rounded-xl py-2.5 font-semibold transition ${disabled
+                        ? 'cursor-not-allowed bg-surface-2 text-muted'
+                        : 'bg-amber-500 text-amber-950 hover:bg-amber-400'
                     }`}
             >
                 {hintLoading ? 'Revelando pista…' : outOfHints ? 'Sin pistas disponibles' : 'Pedir pista'}
@@ -67,7 +67,7 @@ export function HintPanel() {
             {hintError && (
                 <div
                     role="alert"
-                    className="mt-2 flex items-center justify-between gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-300"
+                    className="mt-2 flex items-center justify-between gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-700 dark:text-amber-300"
                 >
                     <span>{hintError}</span>
                     <button onClick={clearHintError} className="hover:opacity-70" aria-label="Cerrar aviso">✕</button>
@@ -81,10 +81,10 @@ export function HintPanel() {
                         initial={{ opacity: 0, y: -8 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: -8 }}
-                        className="mt-3 rounded-xl bg-slate-800 border border-slate-600 p-3"
+                        className="mt-3 rounded-xl border border-border bg-surface-2 p-3"
                     >
-                        <p className="text-xs uppercase tracking-wide text-amber-300 mb-1">Pista actual</p>
-                        <p className="text-sm text-white">{currentHint}</p>
+                        <p className="mb-1 text-xs uppercase tracking-wide text-amber-600 dark:text-amber-300">Pista actual</p>
+                        <p className="text-sm text-fg">{currentHint}</p>
                     </motion.div>
                 )}
             </AnimatePresence>
@@ -100,9 +100,9 @@ export function HintPanel() {
                         {hintsHistory.map((h: string, i: number) => (
                             <li
                                 key={`${i}-${h}`}
-                                className="text-xs text-slate-300 bg-slate-800/60 px-2 py-1 rounded"
+                                className="rounded border border-border bg-surface-2 px-2 py-1 text-xs text-muted"
                             >
-                                <span className="text-slate-500 mr-2">#{i + 1}</span>
+                                <span className="mr-2 text-muted/70">#{i + 1}</span>
                                 {h}
                             </li>
                         ))}

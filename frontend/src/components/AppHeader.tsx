@@ -1,5 +1,5 @@
 import { Link, useNavigate } from 'react-router-dom';
-import { useAuth } from '../features/auth/AuthProvider';
+import { useAuth } from '../features/auth/auth-context';
 import { ThemeToggle } from './ThemeToggle';
 
 export function AppHeader() {

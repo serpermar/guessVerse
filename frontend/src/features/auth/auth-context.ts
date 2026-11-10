@@ -1,4 +1,4 @@
-import { createContext } from 'react';
+import { createContext, useContext } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
 
 export interface AuthCtx {
@@ -11,3 +11,9 @@ export interface AuthCtx {
 }
 
 export const AuthContext = createContext<AuthCtx | null>(null);
+
+export function useAuth() {
+    const ctx = useContext(AuthContext);
+    if (!ctx) throw new Error('useAuth fuera de AuthProvider');
+    return ctx;
+}

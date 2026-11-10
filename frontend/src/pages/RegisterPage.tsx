@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useAuth } from '../features/auth/AuthProvider';
+import { useAuth } from '../features/auth/auth-context';
 
 export function RegisterPage() {
     const { signUp } = useAuth();

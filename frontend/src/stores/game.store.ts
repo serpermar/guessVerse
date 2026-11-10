@@ -28,8 +28,9 @@ interface GameState {
   startGame: (themeSlug: string, boardSize?: number, timeLimit?: number) => Promise<void>;
   toggleEliminate: (id: string) => void;
   askQuestion: (code: string, text: string) => Promise<void>;
+  askAi: (freeText: string) => Promise<{ ok: boolean; message?: string }>;
   makeGuess: (id: string) => Promise<void>;
-  abandon: () => void;
+  abandon: () => Promise<void>;
   hydrate: (themeSlug: string) => boolean;
   reset: () => void;
   clearError: () => void;
@@ -186,6 +187,43 @@ export const useGameStore = create<GameState>((set, get) => ({
     }
   },
 
+  askAi: async (freeText) => {
+    const { gameId, status } = get();
+    if (!gameId || status !== 'playing') {
+      return { ok: false, message: 'La partida no está activa' };
+    }
+
+    try {
+      const res = await api.askFree(gameId, freeText);
+      if (res.answer === 'unknown') {
+        return {
+          ok: false,
+          message: res.message || 'La IA no ha podido interpretar la pregunta. Prueba a reformularla.',
+        };
+      }
+
+      const elim = new Set(get().eliminated);
+      res.matchedIds.forEach((id) => elim.add(id));
+
+      const filterText = Object.entries(res.filters ?? {})
+        .map(([k, v]) => `${k}=${v}`)
+        .join(', ');
+      const answerLabel = res.answer === 'yes' ? '✅ Sí' : '❌ No';
+      const logs = [
+        ...get().logs,
+        { question: `✨ IA: ${freeText}`, answer: answerLabel, details: filterText },
+      ];
+      const isDead = elim.size >= get().board.length;
+      const nextStatus: Status = isDead ? 'lost' : 'playing';
+
+      set({ eliminated: elim, logs, status: nextStatus });
+      persist(get());
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, message: (e as Error).message };
+    }
+  },
+
   makeGuess: async (characterId) => {
     const { gameId, status } = get();
     if (!gameId || status !== 'playing') return;
@@ -206,10 +244,21 @@ export const useGameStore = create<GameState>((set, get) => ({
     }
   },
 
-  abandon: () => {
-    const next = { ...get(), status: 'lost' as Status };
+  abandon: async () => {
+    const { gameId, status } = get();
+    if (status !== 'playing') return;
+
+    // Persistimos el abandono para que cuente en estadísticas.
+    if (gameId) {
+      try {
+        await api.abandon(gameId);
+      } catch (e) {
+        console.warn('No se pudo registrar el abandono:', e);
+      }
+    }
+
     set({ status: 'lost' });
-    persist(next);
+    persist(get());
   },
 
   reset: () => {

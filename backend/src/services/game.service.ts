@@ -19,11 +19,13 @@ export type { Answer };
 
 interface CharacterCard { id: string; name: string; image_url: string | null; }
 
-async function countQuestions(gameId: string): Promise<number> {
-    const { count } = await supabaseAdmin
+async function countQuestions(gameId: string, userId?: string): Promise<number> {
+    let query = supabaseAdmin
         .from('game_questions')
         .select('*', { count: 'exact', head: true })
         .eq('game_id', gameId);
+    if (userId) query = query.eq('user_id', userId);
+    const { count } = await query;
     return count ?? 0;
 }
 
@@ -154,7 +156,12 @@ export async function askQuestion(gameId: string, questionCode: string, userId: 
         else unknown.push(row.character_id);
     }
 
-    await supabaseAdmin.from('game_questions').insert({ game_id: gameId, question_id: question.id || null, answer });
+    await supabaseAdmin.from('game_questions').insert({
+        game_id: gameId,
+        user_id: userId,
+        question_id: question.id || null,
+        answer,
+    });
     return { question: { code: question.code, text: question.text_es }, answer, matches: { yes, no, unknown } };
 }
 
@@ -180,13 +187,18 @@ export async function guessCharacter(gameId: string, characterId: string, userId
     await supabaseAdmin.from('guesses').insert({ game_id: gameId, user_id: userId, character_id: characterId, is_correct: isCorrect });
 
     if (isCorrect) {
-        await supabaseAdmin
+        const { data: finished } = await supabaseAdmin
             .from('games')
             .update({ status: 'won', winner_user_id: userId, finished_at: new Date().toISOString() })
-            .eq('id', gameId);
-        const questions = await countQuestions(gameId);
-        const duration = secondsSince(game.started_at);
-        await recordGameResult(userId, 'won', questions, duration);
+            .eq('id', gameId)
+            .eq('status', 'playing')
+            .select('id')
+            .maybeSingle();
+        if (finished) {
+            const questions = await countQuestions(gameId, userId);
+            const duration = secondsSince(game.started_at);
+            await recordGameResult(userId, 'won', questions, duration);
+        }
         const { data: secret } = await supabaseAdmin
             .from('characters')
             .select('id, name, image_url')
@@ -207,15 +219,21 @@ export async function abandonGame(gameId: string, userId: string) {
     if (game.created_by !== userId) throw HttpError.forbidden('No eres el dueño de esta partida');
 
     if (game.status === 'playing') {
-        await supabaseAdmin
+        const { data: finished } = await supabaseAdmin
             .from('games')
-            .update({ status: 'lost', finished_at: new Date().toISOString() })
-            .eq('id', gameId);
-        const questions = await countQuestions(gameId);
-        const duration = secondsSince(game.started_at);
-        await recordGameResult(userId, 'abandoned', questions, duration);
+            .update({ status: 'abandoned', finished_at: new Date().toISOString() })
+            .eq('id', gameId)
+            .eq('status', 'playing')
+            .select('id')
+            .maybeSingle();
+
+        if (finished) {
+            const questions = await countQuestions(gameId, userId);
+            const duration = secondsSince(game.started_at);
+            await recordGameResult(userId, 'abandoned', questions, duration);
+        }
     }
-    return { status: 'lost' as const };
+    return { status: 'abandoned' as const };
 }
 
 export async function getGame(gameId: string, userId: string) {

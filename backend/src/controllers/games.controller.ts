@@ -9,13 +9,13 @@ import { getHint } from '../services/game.service.js';
 
 
 const createSchema = z.object({
-    themeSlug: z.string().min(1),
+    themeSlug: z.string().min(1).max(64),
     boardSize: z.number().int().min(4).max(32).optional(),
 });
 
-const questionSchema = z.object({ questionCode: z.string().min(1) });
+const questionSchema = z.object({ questionCode: z.string().min(1).max(128) });
 const guessSchema = z.object({ characterId: z.string().uuid() });
-const askFreeSchema = z.object({ freeText: z.string().min(3) });
+const askFreeSchema = z.object({ freeText: z.string().trim().min(3).max(200) });
 
 export async function postCreateGame(req: Request, res: Response, next: NextFunction) {
     try {
@@ -47,19 +47,22 @@ export async function postAbandon(req: Request<{ id: string }>, res: Response, n
     try { res.json(await abandonGame(req.params.id, req.user!.id)); } catch (err) { next(err); }
 }
 
-// NUEVO: Pregunta libre a la IA
+// Pregunta libre a la IA (solo partida clásica del propio jugador)
 export async function postAskFree(req: Request<{ id: string }>, res: Response, next: NextFunction) {
     try {
         const { freeText } = askFreeSchema.parse(req.body);
 
-        // 1. Obtener partida y personaje secreto
+        // 1. Obtener partida y comprobar propiedad/estado
         const { data: game } = await supabaseAdmin
             .from('games')
-            .select('secret_character_id, status')
+            .select('secret_character_id, status, created_by, mode')
             .eq('id', req.params.id)
             .single();
 
-        if (!game || game.status !== 'playing') throw new HttpError(400, 'Partida no válida o terminada');
+        if (!game) throw new HttpError(404, 'Partida no encontrada');
+        if (game.created_by !== req.user!.id) throw new HttpError(403, 'No eres el dueño de esta partida');
+        if (game.mode !== 'classic') throw new HttpError(400, 'La IA solo está disponible en partidas clásicas');
+        if (game.status !== 'playing') throw new HttpError(409, `La partida ya terminó (${game.status})`);
 
         const { data: secretChar } = await supabaseAdmin
             .from('characters')
@@ -74,7 +77,12 @@ export async function postAskFree(req: Request<{ id: string }>, res: Response, n
             .select('character_id, characters(*)')
             .eq('game_id', req.params.id);
 
-        const boardChars = boardRows?.map((row: any) => row.characters).filter(Boolean) || [];
+        const boardChars = (boardRows ?? [])
+            .map((row) => {
+                const raw = row.characters as unknown;
+                return (Array.isArray(raw) ? raw[0] : raw) as (Record<string, unknown> & { id: string }) | null | undefined;
+            })
+            .filter((ch): ch is Record<string, unknown> & { id: string } => Boolean(ch));
 
         // 3. Llamar a la IA
         const result = await askAiFree(freeText, secretChar, boardChars);
@@ -82,6 +90,7 @@ export async function postAskFree(req: Request<{ id: string }>, res: Response, n
         // 4. Registrar la pregunta en el historial
         await supabaseAdmin.from('game_questions').insert({
             game_id: req.params.id,
+            user_id: req.user!.id,
             free_text: freeText,
             answer: result.answer,
             raw_data: { filters: result.filters }

@@ -65,76 +65,76 @@ export function DiscoverPage() {
     };
 
     return (
-        <div className="min-h-screen bg-slate-950 text-white p-4 sm:p-8">
-            <div className="max-w-4xl mx-auto space-y-6 mt-6">
-                <div className="text-center space-y-2">
-                    <h1 className="text-4xl font-black bg-gradient-to-r from-purple-400 to-pink-500 bg-clip-text text-transparent">
+        <div className="min-h-screen bg-canvas p-4 text-fg sm:p-8">
+            <div className="mx-auto mt-6 max-w-4xl space-y-6">
+                <div className="space-y-2 text-center">
+                    <h1 className="text-brand-gradient text-4xl font-black">
                         Descubrir Franquicias
                     </h1>
-                    <p className="text-slate-400 max-w-xl mx-auto">
+                    <p className="mx-auto max-w-xl text-muted">
                         Busca películas, series, anime, videojuegos o libros. Importaremos a sus personajes automáticamente.
                     </p>
                 </div>
 
-                <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-3 bg-slate-900 p-2 rounded-2xl border border-slate-800 shadow-xl">
+                <form onSubmit={handleSearch} className="flex flex-col gap-3 rounded-2xl border border-border bg-surface p-2 shadow-xl sm:flex-row">
                     <input
                         type="text"
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
                         placeholder="Escribe el nombre de una saga, juego o libro..."
-                        className="flex-1 bg-transparent px-4 py-3 text-white placeholder-slate-500 focus:outline-none text-lg"
+                        className="flex-1 bg-transparent px-4 py-3 text-lg text-fg placeholder-muted focus:outline-none"
                         disabled={!!importing}
                     />
                     <button
                         type="submit"
                         disabled={loading || !!importing}
-                        className="bg-purple-600 hover:bg-purple-500 disabled:opacity-50 px-8 py-3 rounded-xl font-bold transition whitespace-nowrap"
+                        className="whitespace-nowrap rounded-xl bg-brand px-8 py-3 font-bold text-white transition hover:opacity-90 disabled:opacity-50"
                     >
                         {loading ? 'Buscando...' : 'Buscar'}
                     </button>
                 </form>
 
-                {error && <div className="bg-red-900/30 border border-red-800 text-red-300 p-4 rounded-xl text-center">{error}</div>}
+                {error && <div role="alert" className="rounded-xl border border-red-500/40 bg-red-500/10 p-4 text-center text-red-600 dark:text-red-300">{error}</div>}
 
                 {success && (
-                    <div className="bg-emerald-900/40 border border-emerald-500/50 text-emerald-300 p-4 rounded-xl text-center font-bold animate-pulse text-lg">
+                    <div className="animate-pulse rounded-xl border border-emerald-500/50 bg-emerald-500/10 p-4 text-center text-lg font-bold text-emerald-600 dark:text-emerald-300">
                         ✅ Franquicia importada. Redirigiendo a la galería...
                     </div>
                 )}
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                     {results.map((r) => {
                         const config = KIND_CONFIG[r.kind] || KIND_CONFIG['Película'];
                         return (
-                            <div key={r.externalId} className={`bg-slate-900 rounded-2xl overflow-hidden flex border transition-all ${importing === r.externalId ? 'border-purple-500 ring-2 ring-purple-500/50' : 'border-slate-800 hover:border-purple-500/50'}`}>
-                                <div className="w-32 shrink-0 bg-slate-950 relative">
+                            <div key={r.externalId} className={`flex overflow-hidden rounded-2xl border bg-surface transition-all ${importing === r.externalId ? 'border-brand ring-2 ring-brand/50' : 'border-border hover:border-brand/50'}`}>
+                                <div className="relative w-32 shrink-0 bg-canvas">
                                     {r.imageUrl ? (
-                                        <img src={r.imageUrl} alt={r.name} className="w-full h-full object-cover" />
+                                        <img src={r.imageUrl} alt={r.name} loading="lazy" decoding="async" className="h-full w-full object-cover" />
                                     ) : (
-                                        <div className="w-full h-full flex items-center justify-center text-slate-600">📦</div>
+                                        <div className="flex h-full w-full items-center justify-center text-muted">📦</div>
                                     )}
-                                    <span className={`absolute top-2 left-2 text-[10px] font-bold uppercase px-2 py-1 rounded-md backdrop-blur-md text-white ${config.color}`}>
+                                    <span className={`absolute left-2 top-2 rounded-md px-2 py-1 text-[10px] font-bold uppercase text-white backdrop-blur-md ${config.color}`}>
                                         {config.icon} {config.label}
                                     </span>
                                 </div>
 
-                                <div className="p-5 flex-1 flex flex-col justify-between">
+                                <div className="flex flex-1 flex-col justify-between p-5">
                                     <div>
-                                        <h3 className="font-bold text-lg leading-tight mb-2">{r.name}</h3>
-                                        <p className="text-xs text-slate-400 line-clamp-3">{r.description || 'Sin descripción.'}</p>
+                                        <h3 className="mb-2 text-lg font-bold leading-tight">{r.name}</h3>
+                                        <p className="line-clamp-3 text-xs text-muted">{r.description || 'Sin descripción.'}</p>
                                     </div>
 
                                     <button
                                         onClick={() => handleImport(r)}
                                         disabled={!!importing || success || r.kind === 'Libro'}
-                                        className={`mt-4 w-full border text-white disabled:opacity-50 px-4 py-2.5 rounded-lg text-sm font-bold transition flex items-center justify-center gap-2 ${r.kind === 'Libro'
-                                            ? 'bg-slate-800 border-slate-700 cursor-not-allowed'
-                                            : 'bg-slate-800 hover:bg-emerald-600 hover:border-emerald-500 border-slate-700'
+                                        className={`mt-4 flex w-full items-center justify-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-bold text-white transition disabled:opacity-50 ${r.kind === 'Libro'
+                                            ? 'cursor-not-allowed border-border bg-surface-2 text-muted'
+                                            : 'border-border bg-surface-2 text-fg hover:border-emerald-500 hover:bg-emerald-600 hover:text-white'
                                             }`}
                                     >
                                         {importing === r.externalId ? (
                                             <>
-                                                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                                                <div className="h-4 w-4 animate-spin rounded-full border-2 border-current/30 border-t-current"></div>
                                                 Importando...
                                             </>
                                         ) : r.kind === 'Libro' ? (
@@ -150,7 +150,7 @@ export function DiscoverPage() {
                 </div>
 
                 {results.length === 0 && !loading && query && !error && (
-                    <p className="text-center text-slate-500 py-10">No se encontraron resultados.</p>
+                    <p className="py-10 text-center text-muted">No se encontraron resultados.</p>
                 )}
             </div>
         </div>

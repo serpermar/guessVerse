@@ -1,5 +1,7 @@
 // backend/src/services/ai.service.ts
 
+import { env } from '../config/env.js';
+
 interface GeneratedQuestion {
     text: string;
     attribute: string;
@@ -16,7 +18,7 @@ export async function generateThemeQuestionsAndAttributes(
     themeName: string,
     characterNames: string[]
 ): Promise<{ questions: GeneratedQuestion[]; characters: CharacterWithAttributes[] }> {
-    const apiKey = process.env.GROQ_API_KEY;
+    const apiKey = env.groqApiKey;
     if (!apiKey) {
         console.warn('⚠️ GROQ_API_KEY no configurada. Saltando generación con IA.');
         return { questions: [], characters: [] };
@@ -89,22 +91,39 @@ export async function generateThemeQuestionsAndAttributes(
 }
 
 // --- 2. Pregunta libre en lenguaje natural durante el juego ---
+export interface AiFreeResult {
+    answer: 'yes' | 'no' | 'unknown';
+    matchedIds: string[];
+    filters: Record<string, string | number | boolean>;
+    message?: string;
+}
+
+function readAttribute(character: Record<string, unknown>, key: string): unknown {
+    const attributes = character.attributes;
+    if (attributes && typeof attributes === 'object' && !Array.isArray(attributes)) {
+        const value = (attributes as Record<string, unknown>)[key];
+        if (value !== undefined) return value;
+    }
+    return character[key];
+}
+
 export async function askAiFree(
     freeText: string,
-    secretCharacter: any,
-    boardCharacters: any[]
-): Promise<{ answer: 'yes' | 'no' | 'unknown', matchedIds: string[], filters: any, message?: string }> {
-    const apiKey = process.env.GROQ_API_KEY;
-    if (!apiKey) throw new Error('Falta GROQ_API_KEY en el .env');
+    secretCharacter: Record<string, unknown>,
+    boardCharacters: Array<Record<string, unknown> & { id: string }>
+): Promise<AiFreeResult> {
+    const apiKey = env.groqApiKey;
+    if (!apiKey) throw new Error('La IA no está configurada en el servidor');
+
+    const question = freeText.trim().slice(0, 200);
+    if (question.length < 3) throw new Error('La pregunta es demasiado corta');
 
     // 1. Extraer los atributos que existen en el tablero
     const availableAttributes = new Set<string>();
     boardCharacters.forEach(ch => {
-        // Atributos del JSONB
-        if (ch.attributes) {
-            Object.keys(ch.attributes).forEach(k => availableAttributes.add(k));
+        if (ch.attributes && typeof ch.attributes === 'object' && !Array.isArray(ch.attributes)) {
+            Object.keys(ch.attributes as Record<string, unknown>).forEach(k => availableAttributes.add(k));
         }
-        // Atributos de la raíz (booleanos y strings)
         ['is_hero', 'is_villain', 'is_human', 'has_powers', 'uses_weapon', 'is_royal',
             'is_soldier', 'is_scientist', 'is_alien', 'is_mutant', 'has_magic',
             'is_immortal', 'is_criminal', 'gender', 'species'].forEach(k => {
@@ -113,17 +132,19 @@ export async function askAiFree(
     });
 
     const attrsList = Array.from(availableAttributes);
-    console.log('🔍 Atributos disponibles para la IA:', attrsList);
 
-    // 2. Prompt mejorado: solo puede usar estos atributos
-    const prompt = `Eres un asistente para un juego de adivinanzas. El usuario pregunta: "${freeText}".
+    // 2. Prompt: solo puede usar atributos presentes en la partida.
+    const prompt = `Eres un asistente para un juego de adivinanzas. El usuario pregunta: "${question}".
     Los atributos disponibles en esta partida son: ${JSON.stringify(attrsList)}.
-    
+
     Traduce la pregunta a un objeto JSON con los filtros aplicables usando SOLO esos atributos.
     Si la pregunta no se puede traducir a ninguno de los atributos disponibles, devuelve un objeto vacío {}.
-    
+
     Ejemplo de respuesta: {"is_villain": true}
     No incluyas texto adicional, solo el JSON.`;
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15_000);
 
     try {
         const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
@@ -135,21 +156,35 @@ export async function askAiFree(
                 response_format: { type: 'json_object' },
                 temperature: 0.1,
             }),
+            signal: controller.signal,
         });
 
         if (!res.ok) {
-            const err = await res.text();
-            throw new Error(`Groq API error: ${err}`);
+            await res.text().catch(() => '');
+            throw new Error('La IA no está disponible en este momento');
         }
 
-        const data = (await res.json()) as any;
+        const data = (await res.json()) as {
+            choices?: Array<{ message?: { content?: string } }>;
+        };
         const content = data.choices?.[0]?.message?.content;
-        if (!content) throw new Error('Respuesta vacía de Groq');
+        if (!content) throw new Error('Respuesta vacía de la IA');
 
-        const filters = JSON.parse(content);
+        const parsed: unknown = JSON.parse(content);
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+            throw new Error('Respuesta inválida de la IA');
+        }
 
-        // Si la IA no devuelve filtros, es que no ha entendido la pregunta
-        if (!filters || Object.keys(filters).length === 0) {
+        // Solo aceptamos atributos existentes y valores primitivos.
+        const filters: Record<string, string | number | boolean> = {};
+        for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
+            if (!availableAttributes.has(key)) continue;
+            if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+                filters[key] = value;
+            }
+        }
+
+        if (Object.keys(filters).length === 0) {
             return {
                 answer: 'unknown',
                 matchedIds: [],
@@ -161,7 +196,7 @@ export async function askAiFree(
         // 3. Evaluar el personaje secreto
         let answer: 'yes' | 'no' | 'unknown' = 'yes';
         for (const [key, value] of Object.entries(filters)) {
-            const secretValue = (secretCharacter.attributes as any)?.[key] ?? (secretCharacter as any)[key];
+            const secretValue = readAttribute(secretCharacter, key);
             if (secretValue === undefined || secretValue === null) {
                 answer = 'unknown';
                 break;
@@ -172,7 +207,6 @@ export async function askAiFree(
             }
         }
 
-        // Si el secreto no tiene el atributo, devolvemos un mensaje claro
         if (answer === 'unknown') {
             return {
                 answer: 'unknown',
@@ -187,7 +221,7 @@ export async function askAiFree(
         for (const ch of boardCharacters) {
             let match = true;
             for (const [key, value] of Object.entries(filters)) {
-                const attrValue = (ch.attributes as any)?.[key] ?? ch[key];
+                const attrValue = readAttribute(ch, key);
                 if (attrValue === undefined || attrValue === null) {
                     match = false;
                     break;
@@ -203,7 +237,12 @@ export async function askAiFree(
 
         return { answer, matchedIds, filters };
     } catch (error) {
+        if (error instanceof Error && error.name === 'AbortError') {
+            throw new Error('La IA tardó demasiado en responder');
+        }
         console.error('Error en askAiFree:', error);
         throw error;
+    } finally {
+        clearTimeout(timeout);
     }
 }

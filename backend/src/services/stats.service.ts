@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '../db/supabase.js';
+import { levelFromXp, xpForGame, type GameResultStatus } from './xp.js';
 
 export interface UserStats {
     games_played: number;
@@ -35,37 +36,75 @@ export async function getStats(userId: string): Promise<UserStats> {
 }
 
 /**
- * Incrementa contadores de forma atómica mediante la función SQL
- * `record_game_result` (migración 0003). Si la función no está desplegada
- * todavía, cae al cálculo clásico lectura-modificación para no romper la app.
+ * Registra el resultado de una partida de forma atómica mediante la RPC
+ * `record_game_result` (migración 0004), que también actualiza XP y nivel.
+ *
+ * Si la migración aún no está desplegada, usa un fallback en TypeScript para
+ * no romper la app (menos atómico, pero funcional).
  */
 export async function recordGameResult(
     userId: string,
-    status: 'won' | 'lost' | 'abandoned',
+    status: GameResultStatus,
     questionsAsked: number,
     durationSeconds: number
 ): Promise<void> {
-    const { data: existing } = await supabaseAdmin.from('statistics').select('*').eq('user_id', userId).maybeSingle();
-    const { data: user } = await supabaseAdmin.from('users').select('xp, level').eq('id', userId).single();
+    const { error } = await supabaseAdmin.rpc('record_game_result', {
+        p_user_id: userId,
+        p_status: status,
+        p_questions: Math.max(0, Math.floor(questionsAsked)),
+        p_duration: Math.max(0, Math.floor(durationSeconds)),
+    });
 
-    const base = existing ?? { user_id: userId, games_played: 0, games_won: 0, games_lost: 0, games_abandoned: 0, questions_asked: 0, avg_duration_seconds: 0, xp_earned: 0 };
+    if (!error) return;
+
+    console.warn('⚠️ RPC record_game_result no disponible; usando fallback:', error.message);
+    await recordGameResultFallback(userId, status, questionsAsked, durationSeconds);
+}
+
+/** Fallback no atómico para entornos sin la migración 0004. */
+export async function recordGameResultFallback(
+    userId: string,
+    status: GameResultStatus,
+    questionsAsked: number,
+    durationSeconds: number
+): Promise<void> {
+    const { data: existing } = await supabaseAdmin
+        .from('statistics')
+        .select('*')
+        .eq('user_id', userId)
+        .maybeSingle();
+    const { data: user } = await supabaseAdmin
+        .from('users')
+        .select('xp, level')
+        .eq('id', userId)
+        .maybeSingle();
+
+    const base = existing ?? {
+        user_id: userId,
+        games_played: 0,
+        games_won: 0,
+        games_lost: 0,
+        games_abandoned: 0,
+        questions_asked: 0,
+        avg_duration_seconds: 0,
+        xp_earned: 0,
+    };
     const currentXp = user?.xp || 0;
+    const safeQuestions = Math.max(0, Math.floor(questionsAsked));
+    const safeDuration = Math.max(0, Math.floor(durationSeconds));
 
     const played = base.games_played + 1;
     const won = base.games_won + (status === 'won' ? 1 : 0);
     const lost = base.games_lost + (status === 'lost' ? 1 : 0);
     const abandoned = base.games_abandoned + (status === 'abandoned' ? 1 : 0);
-    const questions = base.questions_asked + questionsAsked;
-    const avg = base.avg_duration_seconds ? Math.round((base.avg_duration_seconds * base.games_played + durationSeconds) / played) : durationSeconds;
+    const questions = base.questions_asked + safeQuestions;
+    const avg = base.avg_duration_seconds
+        ? Math.round((base.avg_duration_seconds * base.games_played + safeDuration) / played)
+        : safeDuration;
 
-    // 🎯 LÓGICA DE XP
-    let xpGained = 10; // Base por jugar
-    if (status === 'won') xpGained += 50; // Bonus por ganar
-    if (questionsAsked <= 5 && status === 'won') xpGained += 20; // Bonus por eficiencia
-
+    const xpGained = xpForGame(status, safeQuestions);
     const totalXp = currentXp + xpGained;
-    // Nivel = raíz cuadrada de (XP / 100). Nivel 2 a los 400 XP, Nivel 3 a los 900...
-    const newLevel = Math.floor(Math.sqrt(totalXp / 100)) + 1;
+    const newLevel = levelFromXp(totalXp);
 
     await supabaseAdmin.from('statistics').upsert({
         user_id: userId,
@@ -79,7 +118,11 @@ export async function recordGameResult(
         updated_at: new Date().toISOString(),
     }, { onConflict: 'user_id' });
 
-    await supabaseAdmin.from('users').update({ xp: totalXp, level: newLevel }).eq('id', userId);
+    await supabaseAdmin.from('users').upsert({
+        id: userId,
+        xp: totalXp,
+        level: newLevel,
+    }, { onConflict: 'id' });
 }
 
 // Ranking Global
