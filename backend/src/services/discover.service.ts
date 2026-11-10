@@ -1,10 +1,10 @@
 // backend/src/services/discover.service.ts
 import { tmdbFetch } from '../integrations/tmdb/client.js';
 
-export type ContentType = 'Película' | 'Serie' | 'Anime' | 'Videojuego' | 'Libro';
+export type ContentType = 'Película' | 'Serie' | 'Anime' | 'Videojuego' | 'Libro' | 'Manga' | 'Cómic';
 
 export interface DiscoveredFranchise {
-    source: 'tmdb_movie' | 'tmdb_tv' | 'anilist' | 'igdb' | 'openlibrary';
+    source: 'tmdb_movie' | 'tmdb_tv' | 'anilist' | 'igdb' | 'openlibrary' | 'anilist_manga' | 'comicvine';
     kind: ContentType;
     externalId: string;
     name: string;
@@ -129,9 +129,70 @@ async function searchBooks(query: string): Promise<DiscoveredFranchise[]> {
 
 // --- Orquestador principal ---
 export async function discoverFranchises(query: string): Promise<DiscoveredFranchise[]> {
-    const [movies, tvs, animes, games, books] = await Promise.all([
-        searchTmdbMovies(query), searchTmdbTv(query), searchAniList(query),
-        searchIgdbGames(query), searchBooks(query),
+    const [movies, tvs, animes, mangas, games, books] = await Promise.all([
+        searchTmdbMovies(query),
+        searchTmdbTv(query),
+        searchAniList(query),
+        searchAniListManga(query),
+        searchIgdbGames(query),
+        searchBooks(query),
     ]);
-    return [...animes, ...movies, ...tvs, ...games, ...books];
+    return [...animes, ...mangas, ...movies, ...tvs, ...games, ...books];
+}
+
+async function searchAniListManga(query: string): Promise<DiscoveredFranchise[]> {
+    const graphqlQuery = `
+    query ($search: String) {
+      Page(page: 1, perPage: 5) {
+        media(search: $search, type: MANGA) {
+          id
+          title { romaji english }
+          description
+          coverImage { large }
+          format
+        }
+      }
+    }`;
+
+    try {
+        const res = await fetch('https://graphql.anilist.co', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query: graphqlQuery, variables: { search: query } }),
+        });
+
+        if (!res.ok) {
+            console.warn(`[discover] AniList manga HTTP ${res.status}`);
+            return [];
+        }
+
+        const data = (await res.json()) as {
+            data?: {
+                Page?: {
+                    media?: Array<{
+                        id: number;
+                        title: { romaji?: string; english?: string };
+                        description?: string | null;
+                        coverImage?: { large?: string | null } | null;
+                        format?: string | null;
+                    }>;
+                };
+            };
+        };
+
+        return (
+            data?.data?.Page?.media?.map((m) => ({
+                source: 'anilist_manga' as const,
+                kind: 'Manga' as const,
+                externalId: String(m.id),
+                name: m.title.english || m.title.romaji || 'Sin título',
+                description:
+                    m.description?.replace(/<[^>]*>?/gm, '') || 'Sin descripción',
+                imageUrl: m.coverImage?.large ?? null,
+            })) ?? []
+        );
+    } catch (e) {
+        console.error('Error buscando manga:', e);
+        return [];
+    }
 }

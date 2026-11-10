@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 import { discoverFranchises, type DiscoveredFranchise } from '../services/discover.service.js';
 import { importFranchise } from '../services/import-franchise.service.js';
 import { importBookAsFranchise } from '../services/book-import.service.js';
+import { importMangaAsFranchise } from '../services/manga-import.service.js';
 import { asyncHandler } from '../utils/async-handler.js';
 
 export const getDiscover = asyncHandler(async (req: Request, res: Response) => {
@@ -22,8 +23,9 @@ export const postImportFranchise = asyncHandler(async (req: Request, res: Respon
             return;
         }
 
-        // Los libros usan un flujo distinto (Open Library no expone personajes;
-        // los extraemos con IA a partir de la sinopsis).
+        // ============================================================
+        // LIBROS: Open Library no expone personajes → los extraemos con IA.
+        // ============================================================
         if (franchise.source === 'openlibrary') {
             const result = await importBookAsFranchise(franchise);
             res.status(201).json({
@@ -38,10 +40,38 @@ export const postImportFranchise = asyncHandler(async (req: Request, res: Respon
             return;
         }
 
-        // Flujo existente para películas, series, anime y videojuegos.
+        // ============================================================
+        // MANGA: AniList devuelve personajes estructurados → no hace falta IA.
+        // ============================================================
+        if (franchise.source === 'anilist_manga') {
+            const result = await importMangaAsFranchise(franchise);
+            res.status(201).json({
+                ok: true,
+                message: result.warning
+                    ? `${result.charactersImported} personajes importados. ${result.warning}`
+                    : `Manga "${result.franchiseName}" importado con ${result.charactersImported} personajes.`,
+                franchiseId: result.franchiseId,
+                themeSlug: result.themeSlug,
+                charactersImported: result.charactersImported,
+            });
+            return;
+        }
+
+        // ============================================================
+        // RESTO: películas, series, anime y videojuegos (flujo existente).
+        // ============================================================
         await importFranchise(franchise);
-        res.status(201).json({ ok: true, message: `Franquicia "${franchise.name}" importada.` });
+        res.status(201).json({
+            ok: true,
+            message: `Franquicia "${franchise.name}" importada.`,
+        });
     } catch (err) {
-        res.status(400).json({ error: (err as Error).message });
+        // Preserva el status del HttpError si lo hay, si no 400.
+        const status =
+            (err as { status?: number })?.status &&
+                Number.isInteger((err as { status?: number }).status)
+                ? (err as { status: number }).status
+                : 400;
+        res.status(status).json({ error: (err as Error).message });
     }
 });

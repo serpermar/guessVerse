@@ -128,9 +128,25 @@ export interface ThemeDetail {
     };
 }
 
+export type ContentType =
+    | 'Película'
+    | 'Serie'
+    | 'Anime'
+    | 'Videojuego'
+    | 'Libro'
+    | 'Manga'
+    | 'Cómic';
+
 export interface DiscoveredFranchise {
-    source: 'tmdb_movie' | 'tmdb_tv' | 'anilist' | 'igdb' | 'openlibrary';
-    kind: 'Película' | 'Serie' | 'Anime' | 'Videojuego' | 'Libro';
+    source:
+    | 'tmdb_movie'
+    | 'tmdb_tv'
+    | 'anilist'
+    | 'igdb'
+    | 'openlibrary'
+    | 'anilist_manga'
+    | 'comicvine';
+    kind: ContentType;
     externalId: string;
     name: string;
     description: string;

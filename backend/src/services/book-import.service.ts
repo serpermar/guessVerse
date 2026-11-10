@@ -34,7 +34,7 @@ async function fetchWorkDetails(externalId: string): Promise<OpenLibraryWorkDeta
     }
 }
 
-function slugify(name: string): string {
+export function slugify(name: string): string {
     return name
         .toLowerCase()
         .normalize('NFD')
@@ -44,7 +44,7 @@ function slugify(name: string): string {
 }
 
 /** Slugs únicos dentro del mismo batch de personajes. */
-function buildUniqueCharacterSlugs(names: string[]): string[] {
+export function buildUniqueCharacterSlugs(names: string[]): string[] {
     const seen = new Map<string, number>();
     return names.map((raw, idx) => {
         const base = slugify(raw) || `personaje-${idx + 1}`;
@@ -81,7 +81,7 @@ function logSupabaseError(label: string, error: any) {
     console.error('  hint:    ', error.hint);
 }
 
-async function ensureBookTheme(
+export async function ensureBookTheme(
     title: string,
     description: string,
     imageUrl: string | null,

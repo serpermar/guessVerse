@@ -8,6 +8,8 @@ const KIND_CONFIG: Record<string, { label: string; icon: string; color: string }
     Anime: { label: 'Anime', icon: '🎌', color: 'bg-pink-600/80' },
     Videojuego: { label: 'Videojuego', icon: '🎮', color: 'bg-emerald-600/80' },
     Libro: { label: 'Libro', icon: '📚', color: 'bg-purple-600/80' },
+    Manga: { label: 'Manga', icon: '📖', color: 'bg-rose-600/80' },
+    Cómic: { label: 'Cómic', icon: '💥', color: 'bg-yellow-600/80' },
 };
 
 export function DiscoverPage() {
@@ -48,8 +50,7 @@ export function DiscoverPage() {
             const res = await api.importFranchise(franchise);
             setSuccess(true);
 
-            // Para libros usamos el themeSlug devuelto por el backend
-            // (los libros crean su propia temática con slug = slugify(título)).
+            // Libros y mangas crean su propia temática con slug = slugify(título).
             const targetSlug =
                 res.themeSlug ??
                 franchise.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -61,8 +62,6 @@ export function DiscoverPage() {
             const msg = (err as Error).message;
             if (msg.includes('Failed to fetch') || msg.includes('ERR_CONNECTION_REFUSED')) {
                 setError('El servidor está apagado o ha fallado. Revisa la terminal del backend.');
-            } else if (msg.includes('personajes')) {
-                setError(msg); // Ya trae el mensaje específico del backend
             } else {
                 setError(msg);
             }
@@ -76,7 +75,7 @@ export function DiscoverPage() {
                 <div className="space-y-2 text-center">
                     <h1 className="text-brand-gradient text-4xl font-black">Descubrir Franquicias</h1>
                     <p className="mx-auto max-w-xl text-muted">
-                        Busca películas, series, anime, videojuegos o libros. Los personajes se importan automáticamente (en libros, con IA).
+                        Busca películas, series, anime, videojuegos, libros o mangas. Los personajes se importan automáticamente.
                     </p>
                 </div>
 
@@ -85,7 +84,7 @@ export function DiscoverPage() {
                         type="text"
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
-                        placeholder="Escribe el nombre de una saga, juego o libro..."
+                        placeholder="Escribe el nombre de una saga, juego, libro o manga..."
                         className="flex-1 bg-transparent px-4 py-3 text-lg text-fg placeholder-muted focus:outline-none"
                         disabled={!!importing}
                     />
@@ -116,11 +115,20 @@ export function DiscoverPage() {
                         return (
                             <div
                                 key={`${r.source}:${r.externalId}`}
-                                className={`flex overflow-hidden rounded-2xl border bg-surface transition-all ${importing === r.externalId ? 'border-brand ring-2 ring-brand/50' : 'border-border hover:border-brand/50'}`}
+                                className={`flex overflow-hidden rounded-2xl border bg-surface transition-all ${importing === r.externalId
+                                        ? 'border-brand ring-2 ring-brand/50'
+                                        : 'border-border hover:border-brand/50'
+                                    }`}
                             >
                                 <div className="relative w-32 shrink-0 bg-canvas">
                                     {r.imageUrl ? (
-                                        <img src={r.imageUrl} alt={r.name} loading="lazy" decoding="async" className="h-full w-full object-cover" />
+                                        <img
+                                            src={r.imageUrl}
+                                            alt={r.name}
+                                            loading="lazy"
+                                            decoding="async"
+                                            className="h-full w-full object-cover"
+                                        />
                                     ) : (
                                         <div className="flex h-full w-full items-center justify-center text-muted">📦</div>
                                     )}
@@ -133,9 +141,12 @@ export function DiscoverPage() {
                                     <div>
                                         <h3 className="mb-2 text-lg font-bold leading-tight">{r.name}</h3>
                                         <p className="line-clamp-3 text-xs text-muted">{r.description || 'Sin descripción.'}</p>
-                                        {r.kind === 'Libro' && (
+
+                                        {(r.kind === 'Libro' || r.kind === 'Manga') && (
                                             <p className="mt-2 text-[11px] text-purple-500/80">
-                                                📚 Los personajes se extraerán automáticamente con IA. Revísalos después en la temática.
+                                                {r.kind === 'Libro'
+                                                    ? '📚 Los personajes se extraerán automáticamente con IA.'
+                                                    : '📖 Los personajes se obtienen de AniList; los atributos de juego pueden requerir edición manual.'}
                                             </p>
                                         )}
                                     </div>
@@ -148,7 +159,8 @@ export function DiscoverPage() {
                                         {importing === r.externalId ? (
                                             <>
                                                 <div className="h-4 w-4 animate-spin rounded-full border-2 border-current/30 border-t-current"></div>
-                                                Importando{r.kind === 'Libro' ? ' (IA)…' : '…'}
+                                                Importando
+                                                {r.kind === 'Libro' ? ' (IA)…' : '…'}
                                             </>
                                         ) : (
                                             <>➕ Importar</>
