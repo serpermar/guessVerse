@@ -12,6 +12,7 @@ import { errorHandler, notFoundHandler } from './middleware/error.middleware.js'
 import { usersRouter } from './routes/users.routes.js';
 import { discoverRouter } from './routes/discover.routes.js';
 import { charactersRouter } from './routes/characters.routes.js';
+import { supabaseAdmin } from './db/supabase.js';
 
 export const app = express();
 
@@ -44,6 +45,8 @@ app.use('/api/games', gamesRouter);
 app.use('/api/users', usersRouter);
 app.use('/api/discover', discoverRouter);
 app.use('/api/characters', charactersRouter);
+
+// Liveness: el proceso está vivo.
 app.get('/api/health', (_req, res) => {
     res.json({
         status: 'ok',
@@ -51,6 +54,15 @@ app.get('/api/health', (_req, res) => {
         timestamp: new Date().toISOString(),
         env: env.nodeEnv,
     });
+});
+
+// Readiness: dependencias (BD) responden.
+app.get('/api/ready', async (_req, res) => {
+    const { error } = await supabaseAdmin.from('themes').select('id').limit(1);
+    if (error) {
+        return res.status(503).json({ ok: false, error: error.message });
+    }
+    res.json({ ok: true, timestamp: new Date().toISOString() });
 });
 
 // Rutas de desarrollo/importación: NUNCA en producción.

@@ -63,33 +63,25 @@ export async function createGame(themeSlug: string, boardSize: number, userId: s
     const board = shuffle(chars).slice(0, Math.min(size, chars.length));
     const secret = board[Math.floor(Math.random() * board.length)];
 
-    const { data: game, error: gameErr } = await supabaseAdmin
-        .from('games')
-        .insert({
-            theme_id: theme.id,
-            created_by: userId,
-            mode: 'classic',
-            status: 'playing',
-            secret_character_id: secret.id,
-            started_at: new Date().toISOString(),
-            hints_used: 0,
-            hints_history: [],
-        })
-        .select('id')
-        .single();
-    if (gameErr || !game) throw new Error(`Error creando partida: ${gameErr?.message}`);
+    // Creación transaccional: games + game_players + game_characters en una sola
+    // operación. Si falla cualquier paso, Supabase revierte todo automáticamente.
+    const { data: gameId, error: gameErr } = await supabaseAdmin.rpc('create_game_tx', {
+        p_theme_id: theme.id,
+        p_created_by: userId,
+        p_secret_character_id: secret.id,
+        p_character_ids: board.map((c) => c.id),
+    });
 
-    await supabaseAdmin.from('game_players').insert({ game_id: game.id, user_id: userId, role: 'host' });
-
-    const { error: boardErr } = await supabaseAdmin
-        .from('game_characters')
-        .insert(board.map((c) => ({ game_id: game.id, character_id: c.id })));
-    if (boardErr) {
-        await supabaseAdmin.from('games').delete().eq('id', game.id);
-        throw new Error(`Error creando el tablero: ${boardErr.message}`);
+    if (gameErr || !gameId) {
+        throw new Error(`Error creando partida: ${gameErr?.message ?? 'desconocido'}`);
     }
 
-    return { gameId: game.id, theme, board: board as CharacterCard[], status: 'playing' as const };
+    return {
+        gameId: gameId as string,
+        theme,
+        board: board as CharacterCard[],
+        status: 'playing' as const,
+    };
 }
 
 export async function askQuestion(gameId: string, questionCode: string, userId: string) {
@@ -252,8 +244,6 @@ export async function getGame(gameId: string, userId: string) {
 
     const hintsHistory: string[] = Array.isArray(game.hints_history) ? game.hints_history : [];
 
-    // Devolvemos `hints` en un bloque aparte para hidratar el estado del comodín
-    // sin romper la forma `{ game, board }` que ya consume el frontend.
     const { hints_used, hints_history: _raw, ...restGame } = game;
     return {
         game: restGame,
@@ -268,14 +258,6 @@ export async function getGame(gameId: string, userId: string) {
     };
 }
 
-// ========================================================
-// COMODÍN (pista)
-// - Solo en partidas `playing`
-// - Valida rol del jugador (classic = creador, multiplayer = miembro)
-// - Valida cupo en el SERVIDOR (hints_used < MAX_HINTS_PER_GAME)
-// - Evita repetir pistas usando hints_history
-// - Lock optimista para evitar dobles clics concurrentes
-// ========================================================
 export async function getHint(gameId: string, userId: string) {
     const { data: game } = await supabaseAdmin
         .from('games')
@@ -284,13 +266,8 @@ export async function getHint(gameId: string, userId: string) {
         .single();
 
     if (!game) throw HttpError.notFound('Partida no encontrada');
+    if (game.status !== 'playing') throw HttpError.conflict(`La partida ya terminó (${game.status})`);
 
-    // CONSISTENCIA: solo partidas en juego
-    if (game.status !== 'playing') {
-        throw HttpError.conflict(`La partida ya terminó (${game.status})`);
-    }
-
-    // Autorización por modo
     if (game.mode === 'classic' && game.created_by !== userId) {
         throw HttpError.forbidden('No eres el dueño de esta partida');
     }
@@ -304,13 +281,11 @@ export async function getHint(gameId: string, userId: string) {
         if (!player) throw HttpError.forbidden('No eres jugador de esta partida');
     }
 
-    // CONSISTENCIA: cupo de pistas (autoritativo en servidor)
     const hintsUsed = game.hints_used ?? 0;
     if (hintsUsed >= MAX_HINTS_PER_GAME) {
         throw HttpError.conflict('No quedan pistas disponibles');
     }
 
-    // Personaje secreto
     const { data: secret } = await supabaseAdmin
         .from('characters')
         .select('name, species, gender, is_hero, is_villain, attributes')
@@ -318,7 +293,6 @@ export async function getHint(gameId: string, userId: string) {
         .single();
     if (!secret) throw new Error('Personaje secreto no encontrado');
 
-    // Pista nueva (no repetida)
     const history: string[] = Array.isArray(game.hints_history) ? game.hints_history : [];
     const hint = pickNextHint(secret, history);
     if (!hint) throw HttpError.conflict('Este personaje no tiene pistas disponibles');
@@ -326,7 +300,6 @@ export async function getHint(gameId: string, userId: string) {
     const newHintsUsed = hintsUsed + 1;
     const newHistory = [...history, hint];
 
-    // Lock optimista: solo actualiza si nadie ha consumido una pista entre medias
     const { data: updated, error: updErr } = await supabaseAdmin
         .from('games')
         .update({ hints_used: newHintsUsed, hints_history: newHistory })

@@ -288,31 +288,44 @@ export function setupMultiplayerSockets(io: Server) {
                     .maybeSingle();
                 if (!theme) throw new Error('Temática no encontrada');
 
-                let roomCode = generateRoomCode();
-                for (let attempt = 0; attempt < 10; attempt++) {
-                    const { data: existing } = await supabaseAdmin
+                // Intenta insertar con un código generado; si choca con el unique
+                // de room_code (código 23505), reintenta con otro código.
+                let game: GameRow | null = null;
+                let lastError: string | null = null;
+
+                for (let attempt = 0; attempt < 10 && !game; attempt++) {
+                    const roomCode = generateRoomCode();
+                    const { data, error } = await supabaseAdmin
                         .from('games')
-                        .select('id')
-                        .eq('room_code', roomCode)
-                        .maybeSingle();
-                    if (!existing) break;
-                    roomCode = generateRoomCode();
+                        .insert({
+                            theme_id: theme.id,
+                            mode: 'multiplayer',
+                            status: 'waiting',
+                            room_code: roomCode,
+                            created_by: hostId,
+                            current_turn_user_id: hostId,
+                            started_at: new Date().toISOString(),
+                        })
+                        .select('id, theme_id, status, room_code, current_turn_user_id, created_by, started_at, hints_used, hints_history')
+                        .single();
+
+                    if (!error && data) {
+                        game = data as GameRow;
+                        break;
+                    }
+
+                    // unique_violation → código de sala ya existe, reintentar
+                    if (error?.code === '23505') {
+                        lastError = 'Código de sala duplicado';
+                        continue;
+                    }
+
+                    throw new Error(error?.message ?? 'No se pudo crear la sala');
                 }
 
-                const { data: game, error } = await supabaseAdmin
-                    .from('games')
-                    .insert({
-                        theme_id: theme.id,
-                        mode: 'multiplayer',
-                        status: 'waiting',
-                        room_code: roomCode,
-                        created_by: hostId,
-                        current_turn_user_id: hostId,
-                        started_at: new Date().toISOString(),
-                    })
-                    .select('id, theme_id, status, room_code, current_turn_user_id, created_by, started_at, hints_used, hints_history')
-                    .single();
-                if (error || !game) throw new Error(error?.message ?? 'No se pudo crear la sala');
+                if (!game) {
+                    throw new Error(lastError ?? 'No se pudo generar un código de sala único');
+                }
 
                 const { error: playerError } = await supabaseAdmin
                     .from('game_players')
@@ -322,12 +335,14 @@ export function setupMultiplayerSockets(io: Server) {
                         role: 'host',
                         is_connected: true,
                     });
+
                 if (playerError) {
+                    // Limpieza best-effort si el insert del host falla.
                     await supabaseAdmin.from('games').delete().eq('id', game.id);
                     throw new Error(playerError.message);
                 }
 
-                joinRoomSession(game as GameRow);
+                joinRoomSession(game);
                 callback?.({ success: true, roomCode: game.room_code, gameId: game.id });
             } catch (err) {
                 fail(callback, err);
