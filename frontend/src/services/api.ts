@@ -142,6 +142,41 @@ export interface LeaderboardUser {
     level: number;
 }
 
+/** Respuesta del comodín */
+export interface HintResponse {
+    hint: string;
+    hintsUsed: number;
+    hintsLeft: number;
+    hintsHistory: string[];
+    maxHints: number;
+}
+
+/** Respuesta de GET /api/games/:id (hidratación del estado + pistas) */
+export interface GameDetailResponse {
+    game: {
+        id: string;
+        status: 'waiting' | 'playing' | 'won' | 'lost';
+        theme_id: string;
+        created_by: string;
+        started_at: string | null;
+        finished_at: string | null;
+        secret_character_id: string;
+        themes: { id: string; name: string; slug: string; image_url: string | null } | null;
+    };
+    board: {
+        character_id: string;
+        is_eliminated: boolean;
+        characters: CharacterCard | CharacterCard[] | null;
+    }[];
+    hints: {
+        used: number;
+        left: number;
+        history: string[];
+        current: string | null;
+        max: number;
+    };
+}
+
 // ---------- API ----------
 export const api = {
     themes: () => req<{ data: Theme[] }>('/api/themes').then((r) => r.data),
@@ -155,6 +190,9 @@ export const api = {
             method: 'POST',
             body: JSON.stringify({ themeSlug, boardSize }),
         }),
+
+    /** GET /api/games/:id — estado completo + bloque de pistas */
+    getGame: (gameId: string) => req<GameDetailResponse>(`/api/games/${gameId}`),
 
     askQuestion: (gameId: string, questionCode: string) =>
         req<AskResponse>(`/api/games/${gameId}/questions`, {
@@ -214,6 +252,7 @@ export const api = {
 
     deleteTheme: (slug: string) => req<{ ok: boolean }>(`/api/themes/${slug}`, { method: 'DELETE' }),
 
+    /** COMODÍN: devuelve estado completo del cupo de pistas. */
     getHint: (gameId: string) =>
-        req<{ hint: string }>(`/api/games/${gameId}/hint`, { method: 'POST' }),
+        req<HintResponse>(`/api/games/${gameId}/hint`, { method: 'POST' }),
 };

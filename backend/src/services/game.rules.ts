@@ -49,3 +49,19 @@ export function shuffle<T>(input: T[]): T[] {
     }
     return arr;
 }
+
+export const MAX_HINTS_PER_GAME = 2;
+
+export function hintsRemaining(
+    game: { hints_used: number },
+    max: number = MAX_HINTS_PER_GAME,
+): number {
+    return Math.max(0, max - (game.hints_used ?? 0));
+}
+
+export function canRequestHint(
+    game: { status: string; hints_used: number },
+    max: number = MAX_HINTS_PER_GAME,
+): boolean {
+    return game.status === 'playing' && (game.hints_used ?? 0) < max;
+}

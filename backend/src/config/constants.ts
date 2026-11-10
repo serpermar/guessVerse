@@ -1,0 +1,1 @@
+export const MAX_HINTS_PER_GAME = 2;

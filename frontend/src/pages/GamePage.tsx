@@ -60,17 +60,25 @@ export function GamePage() {
     const clearError = useGameStore((s) => s.clearError);
     const reset = useGameStore((s) => s.reset);
 
+    // --- Comodín (estado global) ---
+    const hintsLeft = useGameStore((s) => s.hintsLeft);
+    const hintsUsed = useGameStore((s) => s.hintsUsed);
+    const hintsHistory = useGameStore((s) => s.hintsHistory);
+    const currentHint = useGameStore((s) => s.currentHint);
+    const hintLoading = useGameStore((s) => s.hintLoading);
+    const hintError = useGameStore((s) => s.hintError);
+    const requestHint = useGameStore((s) => s.requestHint);
+    const clearHint = useGameStore((s) => s.clearHint);
+    const clearHintError = useGameStore((s) => s.clearHintError);
+    const syncHints = useGameStore((s) => s.syncHints);
+
     const [questions, setQuestions] = useState<QuestionDto[]>([]);
     const [questionsError, setQuestionsError] = useState(false);
     const [guessMode, setGuessMode] = useState(false);
     const [confirmCard, setConfirmCard] = useState<CharacterCard | null>(null);
     const [aiQuery, setAiQuery] = useState('');
     const [aiLoading, setAiLoading] = useState(false);
-
-    // Estados para los comodines
-    const [hintsLeft, setHintsLeft] = useState(2);
-    const [currentHint, setCurrentHint] = useState<string | null>(null);
-    const [hintLoading, setHintLoading] = useState(false);
+    const [showHintHistory, setShowHintHistory] = useState(false);
 
     const startedRef = useRef(false);
 
@@ -84,7 +92,20 @@ export function GamePage() {
         }
     }, [themeSlug, hydrate, startGame, boardSize, isTimedMode]);
 
-    // Lógica del temporizador
+    // Sincroniza el comodín con el servidor al montar (por si el usuario recarga)
+    useEffect(() => {
+        if (!gameId) return;
+        let cancelled = false;
+        api.getGame(gameId)
+            .then((data) => {
+                if (cancelled || !data.hints) return;
+                syncHints(data.hints);
+            })
+            .catch(() => { /* silencioso: el usuario sigue viendo el estado local */ });
+        return () => { cancelled = true; };
+    }, [gameId, syncHints]);
+
+    // Temporizador
     useEffect(() => {
         if (status !== 'playing' || timeLeft === null) return;
 
@@ -149,7 +170,7 @@ export function GamePage() {
                 .join(', ');
 
             const answerLabel = res.answer === 'yes' ? '✅ Sí' : '❌ No';
-            const logs = [...useGameStore.getState().logs, {
+            const newLogs = [...useGameStore.getState().logs, {
                 question: `✨ IA: ${aiQuery}`,
                 answer: answerLabel,
                 details: filterText
@@ -158,7 +179,7 @@ export function GamePage() {
             const isDead = elim.size >= board.length;
             useGameStore.setState({
                 eliminated: elim,
-                logs,
+                logs: newLogs,
                 status: isDead ? 'lost' : 'playing',
             });
 
@@ -167,20 +188,6 @@ export function GamePage() {
             alert('Error con la IA: ' + (err as Error).message);
         } finally {
             setAiLoading(false);
-        }
-    };
-
-    const askHint = async () => {
-        if (hintsLeft <= 0 || !gameId || status !== 'playing') return;
-        setHintLoading(true);
-        try {
-            const res = await api.getHint(gameId);
-            setCurrentHint(res.hint);
-            setHintsLeft(prev => prev - 1);
-        } catch (err) {
-            alert('Error obteniendo pista: ' + (err as Error).message);
-        } finally {
-            setHintLoading(false);
         }
     };
 
@@ -195,6 +202,7 @@ export function GamePage() {
     );
 
     const remaining = board.length - eliminated.size;
+    const outOfHints = hintsLeft <= 0;
 
     return (
         <main className="mx-auto max-w-6xl animate-fade-in px-4 py-6">
@@ -219,13 +227,54 @@ export function GamePage() {
                 </div>
             )}
 
-            {/* Panel de Pista */}
-            {currentHint && (
-                <div className="bg-amber-900/40 border border-amber-500/50 p-3 rounded-xl text-center mb-4 text-amber-200 flex items-center justify-center gap-4">
-                    <div>💡 <strong>Pista:</strong> {currentHint}</div>
-                    <button onClick={() => setCurrentHint(null)} className="text-xs text-amber-400 hover:text-white underline">Ocultar</button>
+            {hintError && (
+                <div role="alert" className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-2 text-sm text-amber-300">
+                    <span>{hintError}</span>
+                    <button onClick={clearHintError} aria-label="Cerrar aviso" className="hover:opacity-70">✕</button>
                 </div>
             )}
+
+            {/* Panel de Pista actual */}
+            <AnimatePresence>
+                {currentHint && (
+                    <motion.div
+                        key={currentHint}
+                        initial={{ opacity: 0, y: -8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -8 }}
+                        className="bg-amber-900/40 border border-amber-500/50 p-3 rounded-xl text-center mb-4 text-amber-200 flex flex-col items-center gap-2"
+                    >
+                        <div className="flex items-center gap-3">
+                            <span>💡 <strong>Pista:</strong> {currentHint}</span>
+                            <button onClick={clearHint} className="text-xs text-amber-400 hover:text-white underline">Ocultar</button>
+                        </div>
+                        {hintsHistory.length > 1 && (
+                            <button
+                                onClick={() => setShowHintHistory(v => !v)}
+                                className="text-[11px] text-amber-300/80 hover:text-amber-200 underline"
+                            >
+                                {showHintHistory ? 'Ocultar historial' : `Ver historial (${hintsHistory.length})`}
+                            </button>
+                        )}
+                        <AnimatePresence>
+                            {showHintHistory && hintsHistory.length > 0 && (
+                                <motion.ul
+                                    initial={{ opacity: 0, height: 0 }}
+                                    animate={{ opacity: 1, height: 'auto' }}
+                                    exit={{ opacity: 0, height: 0 }}
+                                    className="w-full max-w-md overflow-hidden text-left"
+                                >
+                                    {hintsHistory.map((h, i) => (
+                                        <li key={`${i}-${h}`} className="text-xs text-amber-100/80 bg-amber-950/40 px-2 py-1 rounded mb-1">
+                                            <span className="text-amber-500/70 mr-2">#{i + 1}</span>{h}
+                                        </li>
+                                    ))}
+                                </motion.ul>
+                            )}
+                        </AnimatePresence>
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
             <div className="grid gap-4 lg:grid-cols-[1fr_300px]">
                 <section>
@@ -233,11 +282,19 @@ export function GamePage() {
                         <div className="text-sm text-muted">{guessMode ? 'Selecciona la carta secreta' : 'Clic para descartar/restaurar'}</div>
                         <div className="flex gap-2">
                             <button
-                                onClick={askHint}
-                                disabled={hintsLeft <= 0 || hintLoading || status !== 'playing'}
-                                className="rounded-lg bg-amber-600 hover:bg-amber-500 disabled:opacity-50 px-4 py-2 text-sm font-semibold text-white transition"
+                                onClick={requestHint}
+                                disabled={outOfHints || hintLoading || status !== 'playing'}
+                                title={outOfHints ? 'No te quedan pistas en esta partida' : 'Revelar una pista'}
+                                className={`rounded-lg px-4 py-2 text-sm font-semibold text-white transition ${outOfHints || hintLoading || status !== 'playing'
+                                    ? 'bg-slate-700 cursor-not-allowed opacity-60'
+                                    : 'bg-amber-600 hover:bg-amber-500'
+                                    }`}
                             >
-                                {hintLoading ? '...' : `💡 Comodín (${hintsLeft})`}
+                                {hintLoading
+                                    ? 'Revelando…'
+                                    : outOfHints
+                                        ? `💡 Sin pistas (${hintsUsed})`
+                                        : `💡 Comodín (${hintsLeft})`}
                             </button>
                             {!guessMode ? (
                                 <button onClick={() => setGuessMode(true)} disabled={status !== 'playing'} className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-40">🎯 Adivinar</button>
@@ -247,7 +304,7 @@ export function GamePage() {
                         </div>
                     </div>
 
-                    {/* TABLERO CON ANIMACIONES */}
+                    {/* TABLERO */}
                     <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
                         <AnimatePresence>
                             {board.map((c, i) => {
@@ -273,7 +330,6 @@ export function GamePage() {
                                             <CharacterAvatar character={c} />
                                             <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 to-transparent p-2 text-left text-xs font-semibold text-white sm:text-sm">{c.name}</div>
                                         </motion.div>
-
                                         {dead && (
                                             <div className="absolute inset-0 flex items-center justify-center text-4xl bg-slate-900/80">❌</div>
                                         )}
@@ -285,11 +341,9 @@ export function GamePage() {
                 </section>
 
                 <aside className="space-y-4">
-                    {/* PANEL DE IA */}
+                    {/* IA */}
                     <div className="rounded-2xl border border-purple-500/40 bg-purple-900/10 p-4">
-                        <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-purple-300">
-                            ✨ Preguntar a la IA
-                        </h3>
+                        <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-purple-300">✨ Preguntar a la IA</h3>
                         <form onSubmit={askAi} className="flex flex-col gap-2">
                             <input
                                 type="text"
@@ -309,14 +363,12 @@ export function GamePage() {
                                         <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
                                         Pensando...
                                     </>
-                                ) : (
-                                    'Preguntar'
-                                )}
+                                ) : 'Preguntar'}
                             </button>
                         </form>
                     </div>
 
-                    {/* PREGUNTAS PREDEFINIDAS */}
+                    {/* PREGUNTAS */}
                     <div className="rounded-2xl border border-border bg-surface p-4">
                         <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted">Preguntas rápidas</h3>
                         <div className="grid grid-cols-2 gap-1.5 max-h-48 overflow-y-auto pr-1">

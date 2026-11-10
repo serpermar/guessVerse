@@ -7,6 +7,7 @@ import { supabaseAdmin } from '../db/supabase.js';
 import { HttpError } from '../utils/http-error.js';
 import { getHint } from '../services/game.service.js';
 
+
 const createSchema = z.object({
     themeSlug: z.string().min(1),
     boardSize: z.number().int().min(4).max(32).optional(),
@@ -94,5 +95,7 @@ export async function postHint(req: Request<{ id: string }>, res: Response, next
     try {
         const result = await getHint(req.params.id, req.user!.id);
         res.json(result);
-    } catch (err) { next(err); }
+    } catch (err) {
+        next(err);
+    }
 }
