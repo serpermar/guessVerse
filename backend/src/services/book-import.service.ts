@@ -34,6 +34,7 @@ async function fetchWorkDetails(externalId: string): Promise<OpenLibraryWorkDeta
     }
 }
 
+// 🔑 EXPORTADO — lo usa manga-import y jikan-import
 export function slugify(name: string): string {
     return name
         .toLowerCase()
@@ -43,7 +44,7 @@ export function slugify(name: string): string {
         .replace(/^-|-$/g, '');
 }
 
-/** Slugs únicos dentro del mismo batch de personajes. */
+// 🔑 EXPORTADO
 export function buildUniqueCharacterSlugs(names: string[]): string[] {
     const seen = new Map<string, number>();
     return names.map((raw, idx) => {
@@ -54,7 +55,6 @@ export function buildUniqueCharacterSlugs(names: string[]): string[] {
     });
 }
 
-/** Si el slug ya existe en la BD, le añade sufijo del franchiseId. */
 async function resolveExistingSlugs(slugs: string[], franchiseId: string): Promise<Map<string, string>> {
     const { data: existing, error } = await supabaseAdmin
         .from('characters')
@@ -81,6 +81,7 @@ function logSupabaseError(label: string, error: any) {
     console.error('  hint:    ', error.hint);
 }
 
+// 🔑 EXPORTADO — lo usa manga-import y jikan-import
 export async function ensureBookTheme(
     title: string,
     description: string,
@@ -152,29 +153,20 @@ export async function importBookAsFranchise(
     franchise: DiscoveredFranchise,
 ): Promise<BookImportResult> {
     console.log('[book-import] ─── INICIO ───');
-    console.log('[book-import] Datos:', {
-        name: franchise.name,
-        externalId: franchise.externalId,
-        imageUrl: franchise.imageUrl ? '(presente)' : '(null)',
-    });
-
     const title = franchise.name?.trim();
     if (!title) throw new HttpError(400, 'El libro no tiene título');
 
     const franchiseSlug = slugify(title);
 
     // PASO 1
-    console.log('[book-import] PASO 1 → fetchWorkDetails');
     const details = await fetchWorkDetails(franchise.externalId);
     const fullDescription =
         (typeof details?.description === 'string' && details.description) ||
         (typeof details?.description === 'object' && details.description?.value) ||
         franchise.description ||
         '';
-    console.log(`[book-import] ✅ Descripción: ${fullDescription.length} chars`);
 
     // PASO 2
-    console.log('[book-import] PASO 2 → extractBookCharacters');
     const bookInfo: BookInfo = {
         title,
         authors: [],
@@ -187,52 +179,43 @@ export async function importBookAsFranchise(
     if (extracted.length < BOARD_SIZE_MIN) {
         throw new HttpError(
             400,
-            `Solo se han podido extraer ${extracted.length} personajes de "${title}" (mínimo ${BOARD_SIZE_MIN} para poder jugar). Prueba con otro libro o impórtalo manualmente.`,
+            `Solo se han podido extraer ${extracted.length} personajes de "${title}" (mínimo ${BOARD_SIZE_MIN}).`,
         );
     }
 
     // PASO 3
-    console.log('[book-import] PASO 3 → ensureBookTheme');
     const theme = await ensureBookTheme(title, String(fullDescription).slice(0, 1000), franchise.imageUrl);
 
     // PASO 4
-    console.log('[book-import] PASO 4 → comprobar franquicia existente');
-    const { data: existingFranchise, error: findFranchiseErr } = await supabaseAdmin
+    const { data: existingFranchise } = await supabaseAdmin
         .from('franchises')
         .select('id, name')
         .eq('theme_id', theme.id)
         .eq('slug', franchiseSlug)
         .maybeSingle();
 
-    if (findFranchiseErr) logSupabaseError('Error buscando franquicia existente', findFranchiseErr);
-
     if (existingFranchise) {
-        console.log('[book-import] ✅ Franquicia ya existía:', existingFranchise);
         return {
             franchiseId: existingFranchise.id,
             franchiseName: existingFranchise.name,
             themeSlug: theme.slug,
             charactersImported: 0,
-            warning: `La franquicia "${existingFranchise.name}" ya existía. No se han añadido personajes nuevos.`,
+            warning: `La franquicia "${existingFranchise.name}" ya existía.`,
         };
     }
 
     // PASO 5
-    const franchisePayload = {
-        theme_id: theme.id,
-        slug: franchiseSlug,
-        name: title,
-        description: String(fullDescription).slice(0, 1000) || null,
-        image_url: franchise.imageUrl,
-        source: 'openlibrary',
-        external_id: normalizeExternalId(franchise.externalId),
-    };
-    console.log('[book-import] PASO 5 → crear franquicia');
-    console.log('[book-import] payload:', franchisePayload);
-
     const { data: newFranchise, error: franchiseErr } = await supabaseAdmin
         .from('franchises')
-        .insert(franchisePayload)
+        .insert({
+            theme_id: theme.id,
+            slug: franchiseSlug,
+            name: title,
+            description: String(fullDescription).slice(0, 1000) || null,
+            image_url: franchise.imageUrl,
+            source: 'openlibrary',
+            external_id: normalizeExternalId(franchise.externalId),
+        })
         .select('id, name')
         .single();
 
@@ -240,7 +223,6 @@ export async function importBookAsFranchise(
         logSupabaseError('Error creando franquicia', franchiseErr);
         throw new HttpError(500, `No se pudo crear la franquicia: ${franchiseErr?.message ?? 'error desconocido'}`);
     }
-    console.log('[book-import] ✅ Franquicia creada:', newFranchise);
 
     // PASO 6
     const baseSlugs = buildUniqueCharacterSlugs(extracted.map((c) => c.name));
@@ -262,34 +244,15 @@ export async function importBookAsFranchise(
         attributes: c.extraAttributes ?? {},
     }));
 
-    console.log(`[book-import] PASO 6 → insertar ${rows.length} personajes`);
-    console.log('[book-import] slugs:', rows.map((r) => r.slug));
-    console.log('[book-import] primer personaje (ejemplo):', rows[0]);
-
-    let { error: charsErr } = await supabaseAdmin.from('characters').insert(rows);
-
-    if (charsErr?.code === '23505' && /slug/i.test(charsErr.message)) {
-        console.warn('[book-import] Conflicto de slug, reintentando con sufijo aleatorio');
-        const rand = Math.random().toString(36).slice(2, 8);
-        const retryRows = rows.map((r) => ({ ...r, slug: `${r.slug}-${rand}` }));
-        const retry = await supabaseAdmin.from('characters').insert(retryRows);
-        charsErr = retry.error ?? null;
-    }
+    const { error: charsErr } = await supabaseAdmin.from('characters').insert(rows);
 
     if (charsErr) {
         logSupabaseError('Error insertando personajes', charsErr);
-        const { error: rollbackErr } = await supabaseAdmin
-            .from('franchises')
-            .delete()
-            .eq('id', newFranchise.id);
-        if (rollbackErr) logSupabaseError('Error en rollback de franquicia', rollbackErr);
-        else console.log('[book-import] ↩️ Franquicia eliminada por rollback');
+        await supabaseAdmin.from('franchises').delete().eq('id', newFranchise.id);
         throw new HttpError(500, `No se pudieron insertar los personajes: ${charsErr.message}`);
     }
 
     console.log(`[book-import] ✅ ${rows.length} personajes insertados`);
-    console.log('[book-import] ─── FIN OK ───');
-
     return {
         franchiseId: newFranchise.id,
         franchiseName: newFranchise.name,

@@ -3,6 +3,7 @@ import { discoverFranchises, type DiscoveredFranchise } from '../services/discov
 import { importFranchise } from '../services/import-franchise.service.js';
 import { importBookAsFranchise } from '../services/book-import.service.js';
 import { importMangaAsFranchise } from '../services/manga-import.service.js';
+import { importJikanAsFranchise } from '../services/jikan-import.service.js';
 import { asyncHandler } from '../utils/async-handler.js';
 
 export const getDiscover = asyncHandler(async (req: Request, res: Response) => {
@@ -16,6 +17,8 @@ export const getDiscover = asyncHandler(async (req: Request, res: Response) => {
 });
 
 export const postImportFranchise = asyncHandler(async (req: Request, res: Response) => {
+    console.log('[discover/import] body recibido:', JSON.stringify(req.body));
+
     try {
         const franchise = req.body as DiscoveredFranchise;
         if (!franchise || !franchise.source || !franchise.externalId) {
@@ -23,9 +26,7 @@ export const postImportFranchise = asyncHandler(async (req: Request, res: Respon
             return;
         }
 
-        // ============================================================
-        // LIBROS: Open Library no expone personajes → los extraemos con IA.
-        // ============================================================
+        // LIBROS
         if (franchise.source === 'openlibrary') {
             const result = await importBookAsFranchise(franchise);
             res.status(201).json({
@@ -40,9 +41,7 @@ export const postImportFranchise = asyncHandler(async (req: Request, res: Respon
             return;
         }
 
-        // ============================================================
-        // MANGA: AniList devuelve personajes estructurados → no hace falta IA.
-        // ============================================================
+        // MANGA (AniList)
         if (franchise.source === 'anilist_manga') {
             const result = await importMangaAsFranchise(franchise);
             res.status(201).json({
@@ -57,16 +56,33 @@ export const postImportFranchise = asyncHandler(async (req: Request, res: Respon
             return;
         }
 
-        // ============================================================
-        // RESTO: películas, series, anime y videojuegos (flujo existente).
-        // ============================================================
+        // MANGA (Jikan)
+        if (franchise.source === 'jikan_manga') {
+            const result = await importJikanAsFranchise(franchise);
+            res.status(201).json({
+                ok: true,
+                message: result.warning
+                    ? `${result.charactersImported} personajes importados. ${result.warning}`
+                    : `Manga "${result.franchiseName}" importado con ${result.charactersImported} personajes.`,
+                franchiseId: result.franchiseId,
+                themeSlug: result.themeSlug,
+                charactersImported: result.charactersImported,
+            });
+            return;
+        }
+
+        // RESTO (películas, series, anime, videojuegos)
         await importFranchise(franchise);
         res.status(201).json({
             ok: true,
             message: `Franquicia "${franchise.name}" importada.`,
         });
     } catch (err) {
-        // Preserva el status del HttpError si lo hay, si no 400.
+        // 🔍 Log detallado para diagnosticar
+        console.error('[discover/import] ❌ Error:', err);
+        console.error('[discover/import] Mensaje:', (err as Error)?.message);
+        console.error('[discover/import] Stack:', (err as Error)?.stack);
+
         const status =
             (err as { status?: number })?.status &&
                 Number.isInteger((err as { status?: number }).status)

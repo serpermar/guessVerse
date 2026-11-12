@@ -116,8 +116,8 @@ export function DiscoverPage() {
                             <div
                                 key={`${r.source}:${r.externalId}`}
                                 className={`flex overflow-hidden rounded-2xl border bg-surface transition-all ${importing === r.externalId
-                                        ? 'border-brand ring-2 ring-brand/50'
-                                        : 'border-border hover:border-brand/50'
+                                    ? 'border-brand ring-2 ring-brand/50'
+                                    : 'border-border hover:border-brand/50'
                                     }`}
                             >
                                 <div className="relative w-32 shrink-0 bg-canvas">
@@ -142,11 +142,11 @@ export function DiscoverPage() {
                                         <h3 className="mb-2 text-lg font-bold leading-tight">{r.name}</h3>
                                         <p className="line-clamp-3 text-xs text-muted">{r.description || 'Sin descripción.'}</p>
 
-                                        {(r.kind === 'Libro' || r.kind === 'Manga') && (
+                                        {(r.kind === 'Libro' || r.kind === 'Manga' || r.kind === 'Cómic') && (
                                             <p className="mt-2 text-[11px] text-purple-500/80">
-                                                {r.kind === 'Libro'
-                                                    ? '📚 Los personajes se extraerán automáticamente con IA.'
-                                                    : '📖 Los personajes se obtienen de AniList; los atributos de juego pueden requerir edición manual.'}
+                                                {r.kind === 'Libro' && '📚 Los personajes se extraerán automáticamente con IA.'}
+                                                {r.kind === 'Manga' && '📖 Los personajes y sus imágenes se importan desde la API de manga.'}
+                                                {r.kind === 'Cómic' && '💥 Los personajes y sus imágenes se importan desde la API de cómic.'}
                                             </p>
                                         )}
                                     </div>
@@ -159,8 +159,7 @@ export function DiscoverPage() {
                                         {importing === r.externalId ? (
                                             <>
                                                 <div className="h-4 w-4 animate-spin rounded-full border-2 border-current/30 border-t-current"></div>
-                                                Importando
-                                                {r.kind === 'Libro' ? ' (IA)…' : '…'}
+                                                {r.kind === 'Libro' ? 'Importando (IA)…' : 'Importando…'}
                                             </>
                                         ) : (
                                             <>➕ Importar</>

@@ -137,15 +137,18 @@ export type ContentType =
     | 'Manga'
     | 'Cómic';
 
-export interface DiscoveredFranchise {
-    source:
+export type DiscoverSource =
     | 'tmdb_movie'
     | 'tmdb_tv'
     | 'anilist'
     | 'igdb'
     | 'openlibrary'
     | 'anilist_manga'
+    | 'jikan_manga'
     | 'comicvine';
+
+export interface DiscoveredFranchise {
+    source: DiscoverSource;
     kind: ContentType;
     externalId: string;
     name: string;
