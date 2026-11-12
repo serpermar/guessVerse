@@ -2,11 +2,8 @@
 import { supabaseAdmin } from '../db/supabase.js';
 import { HttpError } from '../utils/http-error.js';
 import { BOARD_SIZE_MIN } from './game.rules.js';
-import {
-    slugify,
-    ensureBookTheme,
-    buildUniqueCharacterSlugs,
-} from './book-import.service.js';
+import { slugify, ensureBookTheme, buildUniqueCharacterSlugs } from './book-import.service.js';
+import { enrichMangaAttributes } from './ai.service.js';
 import type { DiscoveredFranchise } from './discover.service.js';
 
 interface AniListCharacterNode {
@@ -17,9 +14,7 @@ interface AniListCharacterNode {
 interface AniListMediaCharacters {
     data?: {
         Media?: {
-            characters?: {
-                nodes?: AniListCharacterNode[] | null;
-            } | null;
+            characters?: { nodes?: AniListCharacterNode[] | null } | null;
         } | null;
     } | null;
 }
@@ -27,19 +22,6 @@ interface AniListMediaCharacters {
 interface RawCharacter {
     name: string;
     image: string | null;
-}
-
-interface EnrichedCharacter {
-    name: string;
-    image: string | null;
-    species: string | null;
-    gender: string | null;
-    is_hero: boolean | null;
-    is_villain: boolean | null;
-    is_protagonist: boolean | null;
-    has_powers: boolean | null;
-    uses_weapon: boolean | null;
-    attributes: Record<string, unknown>;
 }
 
 async function fetchAniListMangaCharacters(mediaId: string): Promise<RawCharacter[]> {
@@ -58,15 +40,12 @@ async function fetchAniListMangaCharacters(mediaId: string): Promise<RawCharacte
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ query, variables: { id: Number(mediaId) } }),
         });
-
         if (!res.ok) {
             console.warn(`[manga-import] AniList HTTP ${res.status} para id=${mediaId}`);
             return [];
         }
-
         const data = (await res.json()) as AniListMediaCharacters;
         const nodes = data?.data?.Media?.characters?.nodes ?? [];
-
         return nodes
             .map((n) => ({
                 name: n.name?.full ?? '',
@@ -77,34 +56,6 @@ async function fetchAniListMangaCharacters(mediaId: string): Promise<RawCharacte
         console.error('[manga-import] Error consultando AniList characters:', err);
         return [];
     }
-}
-
-/**
- * Rellena atributos de juego. De momento los deja a `null` porque AniList
- * no los expone. Es el punto donde enchufarías una llamada a Groq pasándole
- * `mangaTitle` + la lista de nombres para que los infiera (mismo patrón que
- * `extractBookCharacters`). Conserva `image` para el insert final.
- */
-async function enrichWithAttributes(
-    mangaTitle: string,
-    characters: RawCharacter[],
-): Promise<EnrichedCharacter[]> {
-    // Punto de extensión: aquí se llamaría a Groq si se quiere enriquecer.
-    // De momento logueamos el título para dejar traza y devolvemos nulls.
-    console.log(`[manga-import] Enriqueciendo ${characters.length} personajes de "${mangaTitle}" (sin IA todavía)`);
-
-    return characters.map((c) => ({
-        name: c.name,
-        image: c.image,
-        species: null,
-        gender: null,
-        is_hero: null,
-        is_villain: null,
-        is_protagonist: null,
-        has_powers: null,
-        uses_weapon: null,
-        attributes: {},
-    }));
 }
 
 export interface MangaImportResult {
@@ -123,47 +74,62 @@ export async function importMangaAsFranchise(
 
     const franchiseSlug = slugify(title);
 
-    // 1. Personajes desde AniList
+    // 1. Personajes desde AniList (con imagen)
     const rawCharacters = await fetchAniListMangaCharacters(franchise.externalId);
     console.log(`[manga-import] AniList devolvió ${rawCharacters.length} personajes para "${title}"`);
 
     if (rawCharacters.length < BOARD_SIZE_MIN) {
         throw new HttpError(
             400,
-            `El manga "${title}" solo tiene ${rawCharacters.length} personajes en AniList (mínimo ${BOARD_SIZE_MIN}). Prueba con otro título.`,
+            `El manga "${title}" solo tiene ${rawCharacters.length} personajes en AniList (mínimo ${BOARD_SIZE_MIN}).`,
         );
     }
 
-    // 2. Enriquecer (nulls por ahora)
-    const characters = await enrichWithAttributes(title, rawCharacters);
+    // 2. Enriquecer atributos con IA (species, gender, is_hero…)
+    const attrs = await enrichMangaAttributes(title, rawCharacters.map((c) => c.name));
+    const attrsByName = new Map(attrs.map((a) => [a.name, a]));
 
-    // 3. Crear/obtener tema (una temática por manga)
+    const characters = rawCharacters.map((c) => {
+        const a = attrsByName.get(c.name);
+        return {
+            name: c.name,
+            image: c.image,
+            species: a?.species ?? null,
+            gender: a?.gender ?? null,
+            is_human: a?.is_human ?? null,
+            is_hero: a?.is_hero ?? null,
+            is_villain: a?.is_villain ?? null,
+            is_protagonist: a?.is_protagonist ?? null,
+            has_powers: a?.has_powers ?? null,
+            uses_weapon: a?.uses_weapon ?? null,
+        };
+    });
+
+    // 3. Tema + franquicia
     const theme = await ensureBookTheme(
         title,
         String(franchise.description ?? '').slice(0, 1000),
         franchise.imageUrl,
     );
 
-    // 4. ¿Ya existe la franquicia? Evita duplicar en reimportaciones
-    const { data: existingFranchise } = await supabaseAdmin
+    const { data: existing } = await supabaseAdmin
         .from('franchises')
         .select('id, name')
         .eq('theme_id', theme.id)
         .eq('slug', franchiseSlug)
         .maybeSingle();
 
-    if (existingFranchise) {
+    if (existing) {
         return {
-            franchiseId: existingFranchise.id,
-            franchiseName: existingFranchise.name,
+            franchiseId: existing.id,
+            franchiseName: existing.name,
             themeSlug: theme.slug,
             charactersImported: 0,
-            warning: `La franquicia "${existingFranchise.name}" ya existía. No se han añadido personajes nuevos.`,
+            warning: `La franquicia "${existing.name}" ya existía.`,
         };
     }
 
-    // 5. Crear franquicia
-    const { data: newFranchise, error: franchiseErr } = await supabaseAdmin
+    const { data: newFranchise, error: fErr } = await supabaseAdmin
         .from('franchises')
         .insert({
             theme_id: theme.id,
@@ -177,11 +143,11 @@ export async function importMangaAsFranchise(
         .select('id, name')
         .single();
 
-    if (franchiseErr || !newFranchise) {
-        throw new HttpError(500, `Error creando franquicia: ${franchiseErr?.message ?? 'error desconocido'}`);
+    if (fErr || !newFranchise) {
+        throw new HttpError(500, `Error creando franquicia: ${fErr?.message ?? 'desconocido'}`);
     }
 
-    // 6. Insertar personajes con slug único
+    // 4. Insertar personajes
     const baseSlugs = buildUniqueCharacterSlugs(characters.map((c) => c.name));
     const rows = characters.map((c, idx) => ({
         franchise_id: newFranchise.id,
@@ -190,20 +156,19 @@ export async function importMangaAsFranchise(
         image_url: c.image,
         species: c.species,
         gender: c.gender,
-        is_human: null,
+        is_human: c.is_human,
         is_hero: c.is_hero,
         is_villain: c.is_villain,
         is_protagonist: c.is_protagonist,
         has_powers: c.has_powers,
         uses_weapon: c.uses_weapon,
-        attributes: c.attributes,
+        attributes: {},
     }));
 
-    const { error: charsErr } = await supabaseAdmin.from('characters').insert(rows);
-
-    if (charsErr) {
+    const { error: cErr } = await supabaseAdmin.from('characters').insert(rows);
+    if (cErr) {
         await supabaseAdmin.from('franchises').delete().eq('id', newFranchise.id);
-        throw new HttpError(500, `Error insertando personajes: ${charsErr.message}`);
+        throw new HttpError(500, `Error insertando personajes: ${cErr.message}`);
     }
 
     return {

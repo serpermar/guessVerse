@@ -5,6 +5,7 @@ import { importBookAsFranchise } from '../services/book-import.service.js';
 import { importMangaAsFranchise } from '../services/manga-import.service.js';
 import { importJikanAsFranchise } from '../services/jikan-import.service.js';
 import { asyncHandler } from '../utils/async-handler.js';
+import { importSuperheroFranchise } from '../services/superhero-import.service.js';
 
 export const getDiscover = asyncHandler(async (req: Request, res: Response) => {
     const query = req.query.q as string;
@@ -72,6 +73,20 @@ export const postImportFranchise = asyncHandler(async (req: Request, res: Respon
         }
 
         // RESTO (películas, series, anime, videojuegos)
+        if (franchise.source === 'superhero') {
+            const result = await importSuperheroFranchise(franchise);
+            res.status(201).json({
+                ok: true,
+                message: result.warning
+                    ? `${result.charactersImported} personajes importados. ${result.warning}`
+                    : `Franquicia "${result.franchiseName}" importada con ${result.charactersImported} personajes.`,
+                franchiseId: result.franchiseId,
+                themeSlug: result.themeSlug,
+                charactersImported: result.charactersImported,
+            });
+            return;
+        }
+
         await importFranchise(franchise);
         res.status(201).json({
             ok: true,
@@ -90,4 +105,33 @@ export const postImportFranchise = asyncHandler(async (req: Request, res: Respon
                 : 400;
         res.status(status).json({ error: (err as Error).message });
     }
+});
+
+export const getSuperheroDebug = asyncHandler(async (_req: Request, res: Response) => {
+    const urls = [
+        'https://cdn.jsdelivr.net/gh/akabab/superhero-api@0.3.0/api/all.json',
+        'https://raw.githubusercontent.com/akabab/superhero-api/master/api/all.json',
+        'https://akabab.github.io/superhero-api/api/all.json',
+    ];
+
+    const results = await Promise.all(urls.map(async (url) => {
+        const start = Date.now();
+        try {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), 5000);
+            const r = await fetch(url, { signal: controller.signal }).finally(() => clearTimeout(timer));
+            const text = await r.text();
+            return {
+                url,
+                status: r.status,
+                ok: r.ok,
+                ms: Date.now() - start,
+                bytes: text.length,
+            };
+        } catch (e) {
+            return { url, ok: false, error: (e as Error).message, ms: Date.now() - start };
+        }
+    }));
+
+    res.json({ results });
 });

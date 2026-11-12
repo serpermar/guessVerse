@@ -3,9 +3,11 @@ import { supabaseAdmin } from '../db/supabase.js';
 import { HttpError } from '../utils/http-error.js';
 import { BOARD_SIZE_MIN } from './game.rules.js';
 import { slugify, ensureBookTheme, buildUniqueCharacterSlugs } from './book-import.service.js';
+import { enrichMangaAttributes } from './ai.service.js';
 import type { DiscoveredFranchise } from './discover.service.js';
 
 const JIKAN_BASE = 'https://api.jikan.moe/v4';
+const USER_AGENT = 'GuessVerse/1.0 (https://github.com/serpermar/guessVerse)';
 
 interface JikanCharacter {
     character: {
@@ -16,22 +18,38 @@ interface JikanCharacter {
     role?: string;
 }
 
+async function fetchWithTimeout(url: string, ms: number): Promise<Response> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), ms);
+    try {
+        return await fetch(url, {
+            headers: { 'User-Agent': USER_AGENT, Accept: 'application/json' },
+            signal: controller.signal,
+        });
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
 async function fetchJikanCharacters(malId: string): Promise<Array<{ name: string; image: string | null }>> {
-    const res = await fetch(`${JIKAN_BASE}/manga/${malId}/characters`);
-    if (!res.ok) {
-        console.warn(`[jikan-import] HTTP ${res.status} para manga ${malId}`);
+    try {
+        const res = await fetchWithTimeout(`${JIKAN_BASE}/manga/${malId}/characters`, 8000);
+        if (!res.ok) {
+            console.warn(`[jikan-import] HTTP ${res.status} para manga ${malId}`);
+            return [];
+        }
+        const json = (await res.json()) as { data?: JikanCharacter[] };
+        const list = json.data ?? [];
+        return list
+            .map((c) => ({
+                name: c.character?.name?.trim() ?? '',
+                image: c.character?.images?.jpg?.image_url ?? null,
+            }))
+            .filter((c) => c.name.length > 0);
+    } catch (e) {
+        console.warn(`[jikan-import] Timeout/error consultando ${malId}:`, (e as Error).message);
         return [];
     }
-
-    const json = (await res.json()) as { data?: JikanCharacter[] };
-    const list = json.data ?? [];
-
-    return list
-        .map((c) => ({
-            name: c.character?.name?.trim() ?? '',
-            image: c.character?.images?.jpg?.image_url ?? null,
-        }))
-        .filter((c) => c.name.length > 0);
 }
 
 export interface JikanImportResult {
@@ -50,18 +68,38 @@ export async function importJikanAsFranchise(
 
     const slug = slugify(title);
 
-    // 1. Personajes + imágenes desde Jikan
-    const characters = await fetchJikanCharacters(franchise.externalId);
-    console.log(`[jikan-import] ${characters.length} personajes para "${title}"`);
+    // 1. Personajes + imágenes
+    const rawCharacters = await fetchJikanCharacters(franchise.externalId);
+    console.log(`[jikan-import] ${rawCharacters.length} personajes para "${title}"`);
 
-    if (characters.length < BOARD_SIZE_MIN) {
+    if (rawCharacters.length < BOARD_SIZE_MIN) {
         throw new HttpError(
             400,
-            `"${title}" solo tiene ${characters.length} personajes en Jikan (mínimo ${BOARD_SIZE_MIN}).`,
+            `"${title}" solo tiene ${rawCharacters.length} personajes en Jikan (mínimo ${BOARD_SIZE_MIN}).`,
         );
     }
 
-    // 2. Tema + franquicia
+    // 2. Atributos IA
+    const attrs = await enrichMangaAttributes(title, rawCharacters.map((c) => c.name));
+    const attrsByName = new Map(attrs.map((a) => [a.name, a]));
+
+    const characters = rawCharacters.map((c) => {
+        const a = attrsByName.get(c.name);
+        return {
+            name: c.name,
+            image: c.image,
+            species: a?.species ?? null,
+            gender: a?.gender ?? null,
+            is_human: a?.is_human ?? null,
+            is_hero: a?.is_hero ?? null,
+            is_villain: a?.is_villain ?? null,
+            is_protagonist: a?.is_protagonist ?? null,
+            has_powers: a?.has_powers ?? null,
+            uses_weapon: a?.uses_weapon ?? null,
+        };
+    });
+
+    // 3. Tema + franquicia
     const theme = await ensureBookTheme(title, String(franchise.description ?? ''), franchise.imageUrl);
 
     const { data: existing } = await supabaseAdmin
@@ -99,13 +137,21 @@ export async function importJikanAsFranchise(
         throw new HttpError(500, `Error creando franquicia: ${fErr?.message ?? 'desconocido'}`);
     }
 
-    // 3. Personajes con imagen
+    // 4. Insertar personajes
     const baseSlugs = buildUniqueCharacterSlugs(characters.map((c) => c.name));
     const rows = characters.map((c, idx) => ({
         franchise_id: newFranchise.id,
         slug: baseSlugs[idx],
         name: c.name,
-        image_url: c.image,          // ← imagen real de MyAnimeList
+        image_url: c.image,
+        species: c.species,
+        gender: c.gender,
+        is_human: c.is_human,
+        is_hero: c.is_hero,
+        is_villain: c.is_villain,
+        is_protagonist: c.is_protagonist,
+        has_powers: c.has_powers,
+        uses_weapon: c.uses_weapon,
         attributes: {},
     }));
 

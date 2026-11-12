@@ -12,6 +12,10 @@ const KIND_CONFIG: Record<string, { label: string; icon: string; color: string }
     Cómic: { label: 'Cómic', icon: '💥', color: 'bg-yellow-600/80' },
 };
 
+function isPersonajeSource(source: DiscoveredFranchise['source']): boolean {
+    return source === 'superhero';
+}
+
 export function DiscoverPage() {
     const [query, setQuery] = useState('');
     const [results, setResults] = useState<DiscoveredFranchise[]>([]);
@@ -50,7 +54,6 @@ export function DiscoverPage() {
             const res = await api.importFranchise(franchise);
             setSuccess(true);
 
-            // Libros y mangas crean su propia temática con slug = slugify(título).
             const targetSlug =
                 res.themeSlug ??
                 franchise.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -75,7 +78,10 @@ export function DiscoverPage() {
                 <div className="space-y-2 text-center">
                     <h1 className="text-brand-gradient text-4xl font-black">Descubrir Franquicias</h1>
                     <p className="mx-auto max-w-xl text-muted">
-                        Busca películas, series, anime, videojuegos, libros o mangas. Los personajes se importan automáticamente.
+                        Busca películas, series, anime, videojuegos, libros, mangas y cómics.
+                    </p>
+                    <p className="mx-auto max-w-xl text-xs text-muted/80">
+                        💡 Para cómics (Batman, Spider-Man, Watchmen…), busca por <strong>nombre de personaje</strong>, no por título de la obra.
                     </p>
                 </div>
 
@@ -84,7 +90,7 @@ export function DiscoverPage() {
                         type="text"
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
-                        placeholder="Escribe el nombre de una saga, juego, libro o manga..."
+                        placeholder="Ej: Batman, Spider-Man, Berserk, The Hobbit…"
                         className="flex-1 bg-transparent px-4 py-3 text-lg text-fg placeholder-muted focus:outline-none"
                         disabled={!!importing}
                     />
@@ -112,6 +118,7 @@ export function DiscoverPage() {
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                     {results.map((r) => {
                         const config = KIND_CONFIG[r.kind] || KIND_CONFIG['Película'];
+                        const esPersonaje = isPersonajeSource(r.source);
                         return (
                             <div
                                 key={`${r.source}:${r.externalId}`}
@@ -139,14 +146,34 @@ export function DiscoverPage() {
 
                                 <div className="flex flex-1 flex-col justify-between p-5">
                                     <div>
-                                        <h3 className="mb-2 text-lg font-bold leading-tight">{r.name}</h3>
-                                        <p className="line-clamp-3 text-xs text-muted">{r.description || 'Sin descripción.'}</p>
+                                        <div className="mb-2 flex items-center gap-2">
+                                            <h3 className="text-lg font-bold leading-tight">{r.name}</h3>
+                                            <span
+                                                className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase ${esPersonaje
+                                                        ? 'bg-yellow-500/20 text-yellow-700 dark:text-yellow-300'
+                                                        : 'bg-slate-500/20 text-slate-600 dark:text-slate-300'
+                                                    }`}
+                                            >
+                                                {esPersonaje ? 'Personaje' : 'Obra'}
+                                            </span>
+                                        </div>
+                                        <p className="line-clamp-3 text-xs text-muted">
+                                            {r.description || 'Sin descripción.'}
+                                        </p>
 
-                                        {(r.kind === 'Libro' || r.kind === 'Manga' || r.kind === 'Cómic') && (
+                                        {r.kind === 'Libro' && (
                                             <p className="mt-2 text-[11px] text-purple-500/80">
-                                                {r.kind === 'Libro' && '📚 Los personajes se extraerán automáticamente con IA.'}
-                                                {r.kind === 'Manga' && '📖 Los personajes y sus imágenes se importan desde la API de manga.'}
-                                                {r.kind === 'Cómic' && '💥 Los personajes y sus imágenes se importan desde la API de cómic.'}
+                                                📚 Los personajes se extraerán con IA (sin imagen de retrato).
+                                            </p>
+                                        )}
+                                        {r.kind === 'Manga' && (
+                                            <p className="mt-2 text-[11px] text-rose-500/80">
+                                                📖 Personajes e imágenes se importan desde la API de manga.
+                                            </p>
+                                        )}
+                                        {esPersonaje && (
+                                            <p className="mt-2 text-[11px] text-yellow-600/80">
+                                                💥 Personaje con imagen y atributos completos.
                                             </p>
                                         )}
                                     </div>
@@ -154,7 +181,10 @@ export function DiscoverPage() {
                                     <button
                                         onClick={() => handleImport(r)}
                                         disabled={!!importing || success}
-                                        className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg border border-border bg-surface-2 px-4 py-2.5 text-sm font-bold text-fg transition hover:border-emerald-500 hover:bg-emerald-600 hover:text-white disabled:opacity-50"
+                                        className={`mt-4 flex w-full items-center justify-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-bold transition disabled:opacity-50 ${esPersonaje
+                                                ? 'border-yellow-500/50 bg-yellow-500/10 text-yellow-700 hover:bg-yellow-500 hover:text-white dark:text-yellow-300'
+                                                : 'border-border bg-surface-2 text-fg hover:border-emerald-500 hover:bg-emerald-600 hover:text-white'
+                                            }`}
                                     >
                                         {importing === r.externalId ? (
                                             <>

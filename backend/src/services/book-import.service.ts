@@ -149,6 +149,62 @@ export interface BookImportResult {
     warning?: string;
 }
 
+// Cache de la lista completa de Superhero API para no descargarla en cada import
+let superheroCache: Array<{
+    name: string;
+    imageUrl: string | null;
+}> | null = null;
+
+async function loadSuperheroIndex(): Promise<Array<{ name: string; imageUrl: string | null }>> {
+    if (superheroCache) return superheroCache;
+
+    const urls = [
+        'https://cdn.jsdelivr.net/gh/akabab/superhero-api@0.3.0/api/all.json',
+        'https://raw.githubusercontent.com/akabab/superhero-api/master/api/all.json',
+        'https://akabab.github.io/superhero-api/api/all.json',
+    ];
+
+    for (const url of urls) {
+        try {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), 8000);
+            const res = await fetch(url, { signal: controller.signal }).finally(() => clearTimeout(timer));
+            if (!res.ok) continue;
+            const all = (await res.json()) as Array<{
+                name?: string | null;
+                image?: { lg?: string | null; md?: string | null; sm?: string | null } | null;
+            }>;
+            superheroCache = all
+                .filter((c) => c.name && (c.image?.lg || c.image?.md || c.image?.sm))
+                .map((c) => ({
+                    name: c.name as string,
+                    imageUrl: c.image?.lg ?? c.image?.md ?? c.image?.sm ?? null,
+                }));
+            console.log(`[book-import] Superhero index cargado: ${superheroCache.length} personajes`);
+            return superheroCache;
+        } catch (e) {
+            console.warn(`[book-import] Superhero ${url.split('/')[2]} falló:`, (e as Error).message);
+        }
+    }
+
+    superheroCache = [];
+    return [];
+}
+
+/**
+ * Busca el nombre del personaje en el índice de Superhero API.
+ * Normaliza "Spiderman" → "spiderman" para matchear "Spider-Man".
+ */
+function findSuperheroImage(name: string, index: Array<{ name: string; imageUrl: string | null }>): string | null {
+    if (index.length === 0) return null;
+    const norm = (s: string) =>
+        s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[-_\s.]+/g, '').trim();
+    const target = norm(name);
+    const exact = index.find((c) => norm(c.name) === target);
+    if (exact) return exact.imageUrl;
+    return null;
+}
+
 export async function importBookAsFranchise(
     franchise: DiscoveredFranchise,
 ): Promise<BookImportResult> {
@@ -182,6 +238,18 @@ export async function importBookAsFranchise(
             `Solo se han podido extraer ${extracted.length} personajes de "${title}" (mínimo ${BOARD_SIZE_MIN}).`,
         );
     }
+
+    // 🖼️ Enriquecer con imágenes de Superhero API si hay match
+    const superheroIndex = await loadSuperheroIndex();
+    let withImages = 0;
+    for (const c of extracted) {
+        const img = findSuperheroImage(c.name, superheroIndex);
+        if (img) {
+            (c as any).imageUrl = img;
+            withImages++;
+        }
+    }
+    console.log(`[book-import] 🖼️ ${withImages}/${extracted.length} personajes con imagen de Superhero API`);
 
     // PASO 3
     const theme = await ensureBookTheme(title, String(fullDescription).slice(0, 1000), franchise.imageUrl);
@@ -232,7 +300,7 @@ export async function importBookAsFranchise(
         franchise_id: newFranchise.id,
         slug: slugMap.get(baseSlugs[idx]) ?? baseSlugs[idx],
         name: c.name.trim(),
-        image_url: null,
+        image_url: (c as any).imageUrl ?? null,
         species: c.species ?? null,
         gender: c.gender ?? null,
         is_human: c.is_human ?? null,

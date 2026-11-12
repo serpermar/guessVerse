@@ -145,7 +145,8 @@ export type DiscoverSource =
     | 'openlibrary'
     | 'anilist_manga'
     | 'jikan_manga'
-    | 'comicvine';
+    | 'comicvine'
+    | 'superhero';
 
 export interface DiscoveredFranchise {
     source: DiscoverSource;

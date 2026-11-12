@@ -311,9 +311,10 @@ Reglas:
     // Para cada modelo probamos con y sin response_format json_object,
     // porque algunos modelos devuelven vacío con json_object en prompts largos.
     const attempts: Array<{ model: string; jsonMode: boolean }> = [
-        { model: 'openai/gpt-oss-20b', jsonMode: true },
         { model: 'openai/gpt-oss-20b', jsonMode: false },
-        { model: 'llama-3.1-8b-instant', jsonMode: false },
+        { model: 'openai/gpt-oss-20b', jsonMode: true },
+        { model: 'meta-llama/llama-4-scout-17b-16e-instruct', jsonMode: false },
+        { model: 'openai/gpt-oss-120b', jsonMode: false },
     ];
 
     for (const { model, jsonMode } of attempts) {
@@ -386,7 +387,7 @@ async function callGroq(
         const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
             method: 'POST',
             headers: {
-                'Authorization': `Bearer ${apiKey}`,
+                Authorization: `Bearer ${apiKey}`,
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify(body),
@@ -395,17 +396,37 @@ async function callGroq(
 
         if (!res.ok) {
             const errText = await res.text().catch(() => '');
-            console.warn(`[ai:${model}] HTTP ${res.status}: ${errText.slice(0, 300)}`);
+            console.warn(
+                `[ai:${model}] (jsonMode=${jsonMode}) HTTP ${res.status}: ${errText.slice(0, 400)}`,
+            );
             return null;
         }
 
         const data = (await res.json()) as {
-            choices?: Array<{ message?: { content?: string } }>;
+            choices?: Array<{
+                message?: { content?: string | null; reasoning?: string | null };
+                finish_reason?: string;
+            }>;
         };
-        return data.choices?.[0]?.message?.content ?? null;
+        const choice = data.choices?.[0];
+        const content = choice?.message?.content ?? null;
+
+        // Log cuando viene vacío: casi siempre es "finish_reason=length" o
+        // el modelo devolvió reasoning sin content.
+        if (!content) {
+            console.warn(
+                `[ai:${model}] (jsonMode=${jsonMode}) content vacío. finish_reason=${choice?.finish_reason ?? '?'} ` +
+                `reasoning=${choice?.message?.reasoning ? 'sí' : 'no'}`,
+            );
+            return null;
+        }
+
+        return content;
     } catch (err) {
         if (err instanceof Error && err.name === 'AbortError') {
-            console.warn(`[ai:${model}] Timeout de 45s`);
+            console.warn(`[ai:${model}] (jsonMode=${jsonMode}) Timeout de 45s`);
+        } else {
+            console.warn(`[ai:${model}] (jsonMode=${jsonMode}) Error:`, (err as Error).message);
         }
         return null;
     } finally {
@@ -436,5 +457,168 @@ function extractJson(text: string): any {
         try { return JSON.parse(text.slice(first, last + 1)); } catch { /* noop */ }
     }
 
+    return null;
+}
+
+// ============================================================
+// 4. Enriquecer atributos de manga/cómic con IA (Groq)
+// ============================================================
+//
+// A diferencia de extractBookCharacters, aquí NO inventamos nombres:
+// pasamos los nombres reales que devuelve la API y solo pedimos atributos.
+
+export interface MangaCharacterAttributes {
+    name: string;
+    species?: string | null;
+    gender?: 'male' | 'female' | 'other' | null;
+    is_human?: boolean | null;
+    is_hero?: boolean | null;
+    is_villain?: boolean | null;
+    is_protagonist?: boolean | null;
+    has_powers?: boolean | null;
+    uses_weapon?: boolean | null;
+}
+
+/**
+ * Rellena atributos de juego para personajes de manga/cómic.
+ * Igual que libros: mensaje único de usuario, sin system, y reintento sin
+ * response_format si el modelo lo rechaza. Loguea el cuerpo del error de Groq.
+ */
+export async function enrichMangaAttributes(
+    title: string,
+    characterNames: string[],
+): Promise<MangaCharacterAttributes[]> {
+    const apiKey = env.groqApiKey;
+    if (!apiKey) {
+        console.warn('[ai:manga] GROQ_API_KEY no configurada');
+        return [];
+    }
+    if (characterNames.length === 0) return [];
+
+    const names = characterNames.slice(0, 15);
+
+    const prompt = `Obra: "${title}"
+
+Personajes (usa el nombre EXACTO, sin inventar ni añadir):
+${JSON.stringify(names)}
+
+Devuelve ÚNICAMENTE un JSON con esta forma exacta:
+{"characters":[{"name":"Naruto Uzumaki","species":"humano","gender":"male","is_human":true,"is_hero":true,"is_villain":false,"is_protagonist":true,"has_powers":true,"uses_weapon":false}]}
+
+Reglas:
+- "gender" debe ser "male", "female" u "other". null si no aplica.
+- Todos los booleanos pueden ser null si no estás seguro.
+- "species" es una cadena corta ("humano", "elfo", "alien", "dios"…) o null.
+- No incluyas texto adicional, solo el JSON.`;
+
+    // Patrón que YA funciona en libros: solo user, y si falla reintenta sin json_object.
+    const attempts: Array<{ jsonMode: boolean }> = [
+        { jsonMode: false }, // primero SIN response_format (el más compatible)
+        { jsonMode: true },  // después CON response_format
+    ];
+
+    for (const { jsonMode } of attempts) {
+        try {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), 30_000);
+
+            const body: Record<string, unknown> = {
+                model: 'openai/gpt-oss-20b',
+                messages: [{ role: 'user', content: prompt }], // SOLO user
+                temperature: 0.1,
+                max_tokens: 3000,
+            };
+            if (jsonMode) body.response_format = { type: 'json_object' };
+
+            const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    Authorization: `Bearer ${apiKey}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(body),
+                signal: controller.signal,
+            }).finally(() => clearTimeout(timer));
+
+            if (!res.ok) {
+                const errText = await res.text().catch(() => '');
+                console.warn(
+                    `[ai:manga] gpt-oss-20b (jsonMode=${jsonMode}) HTTP ${res.status}: ${errText.slice(0, 400)}`,
+                );
+                continue;
+            }
+
+            const data = (await res.json()) as {
+                choices?: Array<{ message?: { content?: string } }>;
+            };
+            const content = data.choices?.[0]?.message?.content;
+            if (!content) {
+                console.warn(`[ai:manga] gpt-oss-20b (jsonMode=${jsonMode}) respuesta vacía`);
+                continue;
+            }
+
+            // Parseo tolerante (a veces el modelo devuelve ```json … ```).
+            const parsed = parseJsonLoose(content);
+            const list = parsed?.characters;
+            if (!Array.isArray(list) || list.length === 0) {
+                console.warn(
+                    `[ai:manga] gpt-oss-20b (jsonMode=${jsonMode}) sin "characters" válidos. Raw: ${content.slice(0, 200)}`,
+                );
+                continue;
+            }
+
+            const nameSet = new Set(names);
+            const cleaned: MangaCharacterAttributes[] = list
+                .filter((c: any) => c && typeof c.name === 'string' && nameSet.has(c.name))
+                .map((c: any) => ({
+                    name: c.name,
+                    species:
+                        typeof c.species === 'string' && c.species.trim()
+                            ? c.species.trim()
+                            : null,
+                    gender: ['male', 'female', 'other'].includes(c.gender)
+                        ? (c.gender as 'male' | 'female' | 'other')
+                        : null,
+                    is_human: typeof c.is_human === 'boolean' ? c.is_human : null,
+                    is_hero: typeof c.is_hero === 'boolean' ? c.is_hero : null,
+                    is_villain: typeof c.is_villain === 'boolean' ? c.is_villain : null,
+                    is_protagonist: typeof c.is_protagonist === 'boolean' ? c.is_protagonist : null,
+                    has_powers: typeof c.has_powers === 'boolean' ? c.has_powers : null,
+                    uses_weapon: typeof c.uses_weapon === 'boolean' ? c.uses_weapon : null,
+                }));
+
+            if (cleaned.length > 0) {
+                console.log(
+                    `[ai:manga] ✅ Enriquecidos ${cleaned.length}/${names.length} personajes de "${title}" (jsonMode=${jsonMode})`,
+                );
+                return cleaned;
+            }
+        } catch (err) {
+            if (err instanceof Error && err.name === 'AbortError') {
+                console.warn(`[ai:manga] Timeout de 30s (jsonMode=${jsonMode})`);
+            } else {
+                console.warn(`[ai:manga] Fallo (jsonMode=${jsonMode}):`, (err as Error).message);
+            }
+        }
+    }
+
+    console.warn(`[ai:manga] ❌ No se pudieron enriquecer atributos de "${title}"`);
+    return [];
+}
+
+/** Parsea JSON aunque venga dentro de ```json … ``` o con texto alrededor. */
+function parseJsonLoose(text: string): any {
+    try { return JSON.parse(text); } catch { /* noop */ }
+
+    const block = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+    if (block) {
+        try { return JSON.parse(block[1].trim()); } catch { /* noop */ }
+    }
+
+    const first = text.indexOf('{');
+    const last = text.lastIndexOf('}');
+    if (first !== -1 && last > first) {
+        try { return JSON.parse(text.slice(first, last + 1)); } catch { /* noop */ }
+    }
     return null;
 }
