@@ -4,6 +4,7 @@ import { connectSocket, socket } from '../lib/socket';
 import { useAuth } from '../features/auth/auth-context';
 import { api, type CharacterCard, type QuestionDto } from '../services/api';
 import { Modal } from '../components/Modal';
+import { playSound } from '../lib/sounds';
 
 interface LogEntry {
     text: string;
@@ -62,6 +63,12 @@ interface HintResponse extends ActionResponse {
 
 const INITIAL_HINTS: HintsState = { used: 0, left: 2, history: [], current: null, max: 2 };
 
+function playAnswerSound(answer: string) {
+    if (answer === 'yes' || answer === 'Sí') playSound('correct');
+    else if (answer === 'no' || answer === 'No') playSound('wrong');
+    else playSound('click');
+}
+
 export function MultiplayerGamePage() {
     const { gameId } = useParams<{ gameId: string }>();
     const { user } = useAuth();
@@ -90,6 +97,7 @@ export function MultiplayerGamePage() {
     const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
     const [chatInput, setChatInput] = useState('');
     const chatEndRef = useRef<HTMLDivElement>(null);
+    const prevTurnRef = useRef(isMyTurn);
 
     // IA y comodines
     const [aiQuery, setAiQuery] = useState('');
@@ -100,6 +108,12 @@ export function MultiplayerGamePage() {
     useEffect(() => {
         chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [chatMessages]);
+
+    // Aviso sonoro cuando recuperas el turno.
+    useEffect(() => {
+        if (isMyTurn && !prevTurnRef.current && !winnerId) playSound('turn');
+        prevTurnRef.current = isMyTurn;
+    }, [isMyTurn, winnerId]);
 
     useEffect(() => {
         if (!user || !gameId) return;
@@ -148,11 +162,13 @@ export function MultiplayerGamePage() {
                 return next;
             });
             setIsMyTurn(false);
+            playAnswerSound(data.answer);
         };
         const onOpponentAsked = (data: { askerId: string; questionText: string; answer: string }) => {
             if (data.askerId === user.id) return;
             setLogs((prev) => [...prev, { text: `Rival: ${data.questionText}`, answer: data.answer }]);
             setIsMyTurn(true);
+            playSound('message');
         };
         const onAiResult = (data: { freeText: string; answer: string; matchedIds: string[]; filters: Record<string, string | number | boolean> }) => {
             const filterText = Object.entries(data.filters ?? {})
@@ -165,11 +181,13 @@ export function MultiplayerGamePage() {
                 return next;
             });
             setIsMyTurn(false);
+            playAnswerSound(data.answer);
         };
         const onOpponentAskedAi = (data: { askerId: string; freeText: string; answer: string }) => {
             if (data.askerId === user.id) return;
             setLogs((prev) => [...prev, { text: `Rival IA: ${data.freeText}`, answer: data.answer }]);
             setIsMyTurn(true);
+            playSound('message');
         };
         const onGameOver = (data: { winnerId: string; reason?: string }) => {
             setWinnerId(data.winnerId);
@@ -177,12 +195,14 @@ export function MultiplayerGamePage() {
             setConfirmCard(null);
             setGuessMode(false);
             setOpponentDisconnected(false);
+            playSound(data.winnerId === user.id ? 'win' : 'lose');
         };
         const onWrongGuess = () => {
             setNotice('¡Fallo! Ese no era el personaje secreto.');
             setConfirmCard(null);
             setGuessMode(false);
             setIsMyTurn(false);
+            playSound('wrong');
         };
         const onOpponentDisconnected = () => setOpponentDisconnected(true);
         const onOpponentReconnected = () => setOpponentDisconnected(false);
@@ -192,6 +212,7 @@ export function MultiplayerGamePage() {
                 message: data.message,
                 isMe: data.userId === user.id,
             }]);
+            if (data.userId !== user.id) playSound('message');
         };
 
         connectSocket()
@@ -228,11 +249,13 @@ export function MultiplayerGamePage() {
     const toggleCard = (card: CharacterCard) => {
         if (winnerId) return;
         if (guessMode) {
+            playSound('flip');
             setConfirmCard(card);
             return;
         }
 
         const nextEliminated = !eliminated.has(card.id);
+        playSound(nextEliminated ? 'eliminate' : 'restore');
         setEliminated((prev) => {
             const next = new Set(prev);
             if (nextEliminated) next.add(card.id);
@@ -296,6 +319,7 @@ export function MultiplayerGamePage() {
                     current: res.hint,
                     max: res.maxHints ?? hints.max,
                 });
+                playSound('hint');
             } else {
                 setNotice(res.error ?? 'No se pudo obtener la pista');
             }
@@ -304,6 +328,7 @@ export function MultiplayerGamePage() {
 
     const makeGuess = () => {
         if (!confirmCard || opponentDisconnected || winnerId) return;
+        playSound('guess');
         socket.emit('make_guess', { gameId, characterId: confirmCard.id }, (res: ActionResponse) => {
             if (!res.success) setNotice(res.error ?? 'No se pudo adivinar');
         });
@@ -322,10 +347,12 @@ export function MultiplayerGamePage() {
 
         socket.emit('send_chat', { gameId, message: chatInput.trim() });
         setChatInput('');
+        playSound('message');
     };
 
     const sendQuickChat = (msg: string) => {
         socket.emit('send_chat', { gameId, message: msg });
+        playSound('message');
     };
 
     if (!user) return null;
@@ -400,6 +427,7 @@ export function MultiplayerGamePage() {
                                     <button
                                         key={c.id}
                                         onClick={() => toggleCard(c)}
+                                        data-sound="off"
                                         className={`relative aspect-[3/4] overflow-hidden rounded-xl border-2 transition-all ${dead ? 'border-border opacity-30 grayscale' : 'border-border hover:border-brand'
                                             } ${guessMode && !dead ? 'ring-2 ring-accent' : ''} ${gameEnded ? 'cursor-default' : ''}`}
                                     >

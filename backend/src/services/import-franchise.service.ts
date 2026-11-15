@@ -353,7 +353,7 @@ async function importAniList(franchise: DiscoveredFranchise) {
     const themeSlug = slugify(franchise.name);
 
     const { data: theme, error: themeErr } = await supabaseAdmin
-        .from('themes').upsert({ slug: themeSlug, name: franchise.name, description: franchise.description, type: 'anime', image_url: franchise.imageUrl, question_categories: ['identity', 'role', 'abilities'] }, { onConflict: 'slug' }).select('id').single();
+        .from('themes').upsert({ slug: themeSlug, name: franchise.name, description: franchise.description, type: franchise.kind === 'Manga' ? 'manga' : 'anime', image_url: franchise.imageUrl, question_categories: ['identity', 'role', 'abilities'] }, { onConflict: 'slug' }).select('id').single();
     if (themeErr || !theme) throw new Error(`Error creando theme: ${themeErr?.message}`);
 
     const { data: fran, error: franErr } = await supabaseAdmin

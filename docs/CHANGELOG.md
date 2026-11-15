@@ -4,6 +4,26 @@ Historial de cambios agrupados por sesión de trabajo.
 
 ---
 
+## 🔊 [Sin publicar] — 2026-11-15 — Audio ambiental y cursor de juego
+
+### ➕ Añadido
+- `lib/audio.ts`: motor de audio con **Web Audio API** que sintetiza música ambiental y efectos sin archivos externos.
+- Música propia por temática (Marvel, Star Wars, Pokémon, Harry Potter, DC, terror y genérica) y por modo (individual, contrarreloj, multijugador y lobby).
+- Efectos para clics, descartes, respuestas, pistas, cuenta atrás, victoria, derrota, chat, cambios de turno e importaciones.
+- `SoundToggle`: panel en la cabecera con interruptores y volumen independiente para música y efectos, persistido en `localStorage`.
+- `AmbienceManager`: sincroniza la pista ambiental con la ruta y el modo de juego.
+- `useUiSounds`: sonido global para botones, enlaces y controles, con personalización mediante `data-sound`.
+- Nuevas ambientaciones por género: manga/anime, cómics, videojuegos, fantasía, cine/series, libros y ciencia ficción, además de las franquicias concretas.
+- `AmbienceManager` consulta una vez los tipos de temática (`themes.type`) y los cachea, de modo que las franquicias importadas suenan según su género aunque su slug no sea reconocible.
+- Los importadores guardan tipos más precisos: `manga` para AniList/Jikan, `comics` para superhéroes y `manga` para AniList Manga. Los temas antiguos con tipo `book` se corrigen al reimportarse.
+
+### 🔄 Cambiado
+- `sounds.ts` ahora delega en el motor sintetizado; se eliminan las URLs externas de Mixkit.
+- `index.css`: la interfaz usa cursor normal y desactiva la selección de texto, manteniendo el cursor de escritura y la selección en campos de formulario.
+- `GamePage`, `MultiplayerGamePage`, `LobbyPage`, `ThemeDetailPage` y `DiscoverPage` reproducen sonidos según eventos reales de partida.
+
+---
+
 ## 🎨 [Sin publicar] — 2026-11-10 — Identidad visual y branding
 
 ### ➕ Añadido

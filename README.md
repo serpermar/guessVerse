@@ -9,6 +9,7 @@ Juego web de deducción inspirado en **¿Quién es quién?**, en el que puedes d
 - 👥 **Multijugador 1v1:** salas privadas por código, turnos alternos y preguntas en tiempo real.
 - 🧲 **Importador dinámico:** busca franquicias en TMDB (películas y series) y AniList (anime).
 - ✏️ **Preguntas personalizadas:** crea nuevas preguntas desde la interfaz.
+- 🔊 **Audio ambiental:** música procedural por temática y modo de juego, con efectos y control de volumen.
 - 🔐 **Autenticación:** registro, login y confirmación por email con Supabase.
 
 > ✅ **Estado:** Bloques 1, 2 y 3 completados.  
@@ -19,7 +20,7 @@ Juego web de deducción inspirado en **¿Quién es quién?**, en el que puedes d
 
 ## 🧰 Tecnologías
 
-- **🎨 Frontend:** React 19, TypeScript, Vite 8, Tailwind CSS v4, React Router 7, Zustand 5, Supabase JS y Socket.IO Client.
+- **🎨 Frontend:** React 19, TypeScript, Vite 8, Tailwind CSS v4, React Router 7, Zustand 5, Supabase JS, Socket.IO Client y Web Audio API.
 - **⚙️ Backend:** Node.js, Express 5, TypeScript, Socket.IO, `zod`, `helmet` y `express-rate-limit`.
 - **🗄️ Base de datos:** PostgreSQL mediante Supabase (RLS y triggers).
 - **🔐 Autenticación:** Supabase Auth (email + password + verificación).
@@ -168,6 +169,20 @@ npm run dev
 ```
 
 Vite mostrará `http://localhost:5173`. Ábrelo en el navegador.
+
+---
+
+## 🔊 Audio
+
+- **Motor:** `frontend/src/lib/audio.ts` genera música y efectos con **Web Audio API**; no usa archivos externos ni depende de Internet.
+- **Ambientación por temática:** Marvel, DC, Star Wars, Harry Potter, Pokémon, manga/anime, cómics, videojuegos, fantasía, cine/series, libros, ciencia ficción, terror y una pista genérica.
+- **Detección automática:** primero se reconocen franquicias conocidas por su slug y, si no, se usa el tipo de la temática en BD (`manga`, `comics`, `anime`, `videogames`, `fantasy`, `book`, `movies`…). Las franquicias importadas desde Descubrir heredan el tipo correcto.
+- **Modos de juego:** individual, contrarreloj, multijugador y lobby cambian tempo, energía y percusión.
+- **Efectos:** clics, descartes, respuestas, pistas, cuenta atrás, victoria, derrota, chat y cambios de turno.
+- **Control:** botón 🎵 en la cabecera con interruptores y volumen independiente para música y efectos. Las preferencias se guardan en `localStorage`.
+- **Autoplay:** el navegador requiere una primera interacción; el audio arranca en el primer clic o tecla y se pausa al ocultar la pestaña.
+
+> 💡 No hay que descargar pistas ni configurar rutas de audio. Todo se sintetiza en el navegador.
 
 ---
 

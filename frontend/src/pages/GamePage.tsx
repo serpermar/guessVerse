@@ -83,6 +83,9 @@ export function GamePage() {
     const [showHintHistory, setShowHintHistory] = useState(false);
 
     const startedRef = useRef(false);
+    const prevStatusRef = useRef(status);
+    const prevLogCountRef = useRef(logs.length);
+    const prevHintRef = useRef(currentHint);
 
     useEffect(() => {
         if (!themeSlug || startedRef.current) return;
@@ -112,17 +115,43 @@ export function GamePage() {
         if (status !== 'playing' || timeLeft === null) return;
 
         if (timeLeft <= 0) {
-            playSound('lose');
             void abandon();
             return;
         }
 
         const timer = setInterval(() => {
-            setTimeLeft(timeLeft - 1);
+            const next = timeLeft - 1;
+            setTimeLeft(next);
+            if (next > 0 && next <= 10) playSound('tick');
         }, 1000);
 
         return () => clearInterval(timer);
     }, [status, timeLeft, setTimeLeft, abandon]);
+
+    // Sonidos de fin de partida y de cada respuesta registrada.
+    useEffect(() => {
+        if (status !== prevStatusRef.current) {
+            if (status === 'won') playSound('win');
+            else if (status === 'lost') playSound('lose');
+        }
+        prevStatusRef.current = status;
+    }, [status]);
+
+    useEffect(() => {
+        if (logs.length > prevLogCountRef.current) {
+            const last = logs[logs.length - 1];
+            if (last && !last.question.startsWith('💡')) {
+                if (last.answer.includes('Sí')) playSound('correct');
+                else if (last.answer.includes('No')) playSound('wrong');
+            }
+        }
+        prevLogCountRef.current = logs.length;
+    }, [logs]);
+
+    useEffect(() => {
+        if (currentHint && currentHint !== prevHintRef.current) playSound('hint');
+        prevHintRef.current = currentHint;
+    }, [currentHint]);
 
     const loadQuestions = useCallback(() => {
         if (!themeSlug) return () => undefined;
@@ -137,9 +166,13 @@ export function GamePage() {
 
     const onCardClick = (card: CharacterCard) => {
         if (status !== 'playing') return;
-        playSound('flip');
-        if (guessMode) setConfirmCard(card);
-        else toggleEliminate(card.id);
+        if (guessMode) {
+            playSound('flip');
+            setConfirmCard(card);
+            return;
+        }
+        playSound(eliminated.has(card.id) ? 'restore' : 'eliminate');
+        toggleEliminate(card.id);
     };
 
     const confirmGuess = async () => {
@@ -147,7 +180,9 @@ export function GamePage() {
         const card = confirmCard;
         setConfirmCard(null);
         setGuessMode(false);
+        playSound('guess');
         await makeGuess(card.id);
+        if (useGameStore.getState().status === 'playing') playSound('wrong');
     };
 
     const askAiQuestion = async (e: React.FormEvent) => {
@@ -192,7 +227,7 @@ export function GamePage() {
                         </span>
                     )}
                     <span className="rounded-full border border-border bg-surface px-3 py-1 text-muted">Quedan <strong className="text-fg">{remaining}</strong></span>
-                    <button onClick={() => { playSound('lose'); void abandon(); }} disabled={status !== 'playing'} className="text-muted transition hover:text-red-500 disabled:opacity-40">Abandonar</button>
+                    <button onClick={() => { void abandon(); }} disabled={status !== 'playing'} className="text-muted transition hover:text-red-500 disabled:opacity-40">Abandonar</button>
                     <button onClick={goHome} className="text-muted transition hover:text-fg">← Salir</button>
                 </div>
             </div>
@@ -296,6 +331,7 @@ export function GamePage() {
                                         whileHover={{ scale: 1.05 }}
                                         whileTap={{ scale: 0.95 }}
                                         onClick={() => onCardClick(c)}
+                                        data-sound="off"
                                         className={`relative aspect-[3/4] overflow-hidden rounded-xl border border-border transition ${dead ? 'border-border opacity-30 grayscale' : 'hover:border-brand/60 hover:shadow-lg hover:shadow-brand/10'
                                             } ${guessMode && !dead ? 'ring-2 ring-accent/60' : ''}`}
                                     >
@@ -364,7 +400,7 @@ export function GamePage() {
                                 <div className="col-span-2 text-xs italic text-muted">Cargando preguntas…</div>
                             )}
                             {questions.map((q) => (
-                                <button key={q.code} onClick={() => { playSound('click'); askQuestion(q.code, q.text_es); }} disabled={status !== 'playing'} className="rounded-lg border border-border bg-surface-2 p-2 text-xs transition hover:border-brand/50 hover:bg-surface disabled:opacity-40 text-left">{q.text_es}</button>
+                                <button key={q.code} onClick={() => { askQuestion(q.code, q.text_es); }} disabled={status !== 'playing'} className="rounded-lg border border-border bg-surface-2 p-2 text-xs transition hover:border-brand/50 hover:bg-surface disabled:opacity-40 text-left">{q.text_es}</button>
                             ))}
                         </div>
                     </div>
@@ -402,7 +438,7 @@ export function GamePage() {
                     <div className="mb-4 text-6xl animate-bounce">🏆</div>
                     <h3 className="mb-2 text-2xl font-bold">¡Acertaste!</h3>
                     <p className="mb-4 text-muted">Era <strong className="text-fg">{secret.name}</strong></p>
-                    <button onClick={() => { playSound('win'); goHome(); }} className="rounded-lg bg-brand-strong px-6 py-2 font-semibold text-white transition hover:opacity-90">Volver al inicio</button>
+                    <button onClick={goHome} className="rounded-lg bg-brand-strong px-6 py-2 font-semibold text-white transition hover:opacity-90">Volver al inicio</button>
                 </Modal>
             )}
 

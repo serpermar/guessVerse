@@ -86,19 +86,32 @@ export async function ensureBookTheme(
     title: string,
     description: string,
     imageUrl: string | null,
+    type: 'book' | 'manga' | 'comics' = 'book',
 ): Promise<{ id: string; slug: string; name: string }> {
     const slug = slugify(title);
-    console.log(`[book-import] ensureBookTheme → slug="${slug}"`);
+    console.log(`[book-import] ensureBookTheme → slug="${slug}" type="${type}"`);
 
     const { data: existing, error: findErr } = await supabaseAdmin
         .from('themes')
-        .select('id, slug, name')
+        .select('id, slug, name, type')
         .eq('slug', slug)
         .maybeSingle();
 
     if (findErr) logSupabaseError('Error buscando tema existente', findErr);
     if (existing) {
         console.log('[book-import] ✅ Tema ya existía:', existing);
+        // Los temas importados antes de distinguir manga/cómic quedaron como
+        // "book"; si ahora conocemos su tipo real, lo corregimos para que la
+        // ambientación y el catálogo lo traten bien.
+        if (existing.type !== type) {
+            const { error: updateErr } = await supabaseAdmin
+                .from('themes')
+                .update({ type })
+                .eq('id', existing.id);
+            if (updateErr) {
+                console.warn('[book-import] No se pudo actualizar el tipo:', updateErr.message);
+            }
+        }
         return existing;
     }
 
@@ -110,7 +123,7 @@ export async function ensureBookTheme(
             description: description || null,
             image_url: imageUrl,
             is_active: true,
-            type: 'book',
+            type,
         })
         .select('id, slug, name')
         .single();

@@ -100,7 +100,12 @@ export async function importJikanAsFranchise(
     });
 
     // 3. Tema + franquicia
-    const theme = await ensureBookTheme(title, String(franchise.description ?? ''), franchise.imageUrl);
+    const theme = await ensureBookTheme(
+        title,
+        String(franchise.description ?? ''),
+        franchise.imageUrl,
+        'manga',
+    );
 
     const { data: existing } = await supabaseAdmin
         .from('franchises')

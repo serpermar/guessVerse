@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api, type CharacterDetail, type ThemeDetail } from '../services/api';
 import { useGameStore } from '../stores/game.store';
 import { Spinner } from '../components/ui/Spinner';
+import { playSound } from '../lib/sounds';
 
 type EditableCharacter = CharacterDetail & Record<string, unknown>;
 
@@ -105,6 +106,7 @@ export function ThemeDetailPage() {
 
     const handlePlay = (size: number, mode?: 'timed') => {
         if (!slug) return;
+        playSound('start');
         resetGame();
         const url = `/game/${slug}?size=${size}${mode === 'timed' ? '&mode=timed' : ''}`;
         nav(url);
@@ -140,6 +142,7 @@ export function ThemeDetailPage() {
                 } as Record<string, string | number | boolean | null>,
             };
             await api.updateCharacter(editingChar.id, payload);
+            playSound('correct');
             setEditingChar(null);
             await loadDetail();
         } catch (err) {
@@ -169,6 +172,7 @@ export function ThemeDetailPage() {
         setActionError(null);
         try {
             await api.createQuestion(slug, newQuestionText, newQuestionAttr);
+            playSound('correct');
             setShowAddQuestion(false);
             setNewQuestionText('');
             setNewQuestionAttr('');

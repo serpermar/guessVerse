@@ -1,10 +1,12 @@
 import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './features/auth/AuthProvider';
+import { AmbienceManager } from './components/AmbienceManager';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { AppHeader } from './components/AppHeader';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { Spinner } from './components/ui/Spinner';
+import { useUiSounds } from './hooks/useUiSounds';
 
 const HomePage = lazy(() => import('./pages/HomePage').then((m) => ({ default: m.HomePage })));
 const GamePage = lazy(() => import('./pages/GamePage').then((m) => ({ default: m.GamePage })));
@@ -27,10 +29,13 @@ function PageFallback() {
 }
 
 function App() {
+  useUiSounds();
+
   return (
     <ErrorBoundary>
       <AuthProvider>
         <BrowserRouter>
+          <AmbienceManager />
           <div className="min-h-screen bg-canvas text-fg">
             <AppHeader />
             <Suspense fallback={<PageFallback />}>

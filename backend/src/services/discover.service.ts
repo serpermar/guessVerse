@@ -335,6 +335,13 @@ async function searchBooks(query: string): Promise<DiscoveredFranchise[]> {
 // -----------------------------------------------------------------------------
 // 7. Superhero API (Cómics)
 // -----------------------------------------------------------------------------
+interface SuperheroRecord {
+    id?: number;
+    name?: string | null;
+    image?: { lg?: string | null; md?: string | null; sm?: string | null } | null;
+    biography?: { publisher?: string | null; fullName?: string | null } | null;
+}
+
 async function searchSuperheroes(query: string): Promise<DiscoveredFranchise[]> {
     // Probamos varias URLs porque cdn.jsdelivr.net puede estar bloqueado en algunas redes.
     const urls = [
@@ -343,12 +350,7 @@ async function searchSuperheroes(query: string): Promise<DiscoveredFranchise[]> 
         'https://akabab.github.io/superhero-api/api/all.json',
     ];
 
-    let all: Array<{
-        id?: number;
-        name?: string | null;
-        image?: { lg?: string | null; md?: string | null; sm?: string | null } | null;
-        biography?: { publisher?: string | null; fullName?: string | null } | null;
-    }> | null = null;
+    let all: SuperheroRecord[] | null = null;
 
     for (const url of urls) {
         try {
@@ -357,7 +359,7 @@ async function searchSuperheroes(query: string): Promise<DiscoveredFranchise[]> 
                 console.warn(`[superhero] ${url.split('/')[2]} → HTTP ${res.status}`);
                 continue;
             }
-            all = await res.json();
+            all = (await res.json()) as SuperheroRecord[];
             console.log(`[superhero] ✅ cargado desde ${url.split('/')[2]} (${all?.length ?? 0} personajes)`);
             break;
         } catch (e) {

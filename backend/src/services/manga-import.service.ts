@@ -110,6 +110,7 @@ export async function importMangaAsFranchise(
         title,
         String(franchise.description ?? '').slice(0, 1000),
         franchise.imageUrl,
+        'manga',
     );
 
     const { data: existing } = await supabaseAdmin

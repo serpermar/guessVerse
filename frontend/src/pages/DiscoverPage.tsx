@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, type DiscoveredFranchise } from '../services/api';
+import { refreshThemeTypes } from '../lib/theme-types';
+import { playSound } from '../lib/sounds';
 
 const KIND_CONFIG: Record<string, { label: string; icon: string; color: string }> = {
     Película: { label: 'Película', icon: '🎬', color: 'bg-blue-600/80' },
@@ -53,6 +55,10 @@ export function DiscoverPage() {
         try {
             const res = await api.importFranchise(franchise);
             setSuccess(true);
+            playSound('correct');
+            // La temática recién importada aún no está en la caché de tipos;
+            // recargamos para que su ambientación por género suene al entrar.
+            refreshThemeTypes();
 
             const targetSlug =
                 res.themeSlug ??

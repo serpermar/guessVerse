@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { connectSocket, socket } from '../lib/socket';
 import { useAuth } from '../features/auth/auth-context';
 import { api, type Theme } from '../services/api';
+import { playSound } from '../lib/sounds';
 
 interface RoomResponse {
     success: boolean;
@@ -37,6 +38,7 @@ export function LobbyPage() {
         };
         const onPlayerJoined = (data: { gameId: string }) => {
             setWaiting(false);
+            playSound('join');
             nav(`/multiplayer/${data.gameId}`);
         };
 
@@ -64,6 +66,7 @@ export function LobbyPage() {
         socket.emit('create_room', { themeSlug: selectedTheme }, (res: RoomResponse) => {
             if (res.success) {
                 setCreatedCode(res.roomCode ?? null);
+                playSound('join');
                 // waiting se queda true
             } else {
                 setError(res.error ?? 'No se pudo crear la sala');
@@ -79,6 +82,7 @@ export function LobbyPage() {
         setError(null);
         socket.emit('join_room', { roomCode }, (res: RoomResponse) => {
             if (res.success && res.gameId) {
+                playSound('join');
                 nav(`/multiplayer/${res.gameId}`);
             } else {
                 setError(res.error ?? 'No se pudo entrar en la sala');

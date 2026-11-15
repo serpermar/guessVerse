@@ -16,6 +16,7 @@ Juego web de deducción tipo «¿Quién es quién?» con personajes de cultura p
 - 🎭 **Temáticas base:** Marvel, Star Wars, Pokémon, Harry Potter y DC Comics.
 - 🧲 **Importación dinámica:** franquicias de TMDB (películas y series) y AniList (anime).
 - 👥 **Multijugador:** salas privadas por código, turnos alternos, preguntas en tiempo real y gestión de desconexiones.
+- 🔊 **Audio:** música ambiental procedural por franquicia y género (manga, cómic, fantasía, videojuegos, cine…), efectos de juego y controles de volumen.
 - ⏳ **Pendiente:** despliegue y funcionalidades avanzadas de IA.
 
 ---
@@ -31,6 +32,7 @@ Juego web de deducción tipo «¿Quién es quién?» con personajes de cultura p
 - Zustand 5 (persistencia en `localStorage`)
 - **Supabase JS:** Auth + `anon key`
 - **Socket.IO Client:** comunicación en tiempo real
+- **Web Audio API:** música y efectos sintetizados en el navegador
 
 ### 2.2. ⚙️ Backend
 

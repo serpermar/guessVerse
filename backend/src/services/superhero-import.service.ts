@@ -81,7 +81,7 @@ export async function importSuperheroFranchise(
     }
 
     // 2. Crear/obtener tema
-    const theme = await ensureBookTheme(title, franchise.description, franchise.imageUrl);
+    const theme = await ensureBookTheme(title, franchise.description, franchise.imageUrl, 'comics');
 
     const { data: existing } = await supabaseAdmin
         .from('franchises')
