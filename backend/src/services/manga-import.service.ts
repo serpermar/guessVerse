@@ -2,7 +2,12 @@
 import { supabaseAdmin } from '../db/supabase.js';
 import { HttpError } from '../utils/http-error.js';
 import { BOARD_SIZE_MIN } from './game.rules.js';
-import { slugify, ensureBookTheme, buildUniqueCharacterSlugs } from './book-import.service.js';
+import {
+    slugify,
+    ensureBookTheme,
+    buildUniqueCharacterSlugs,
+    resolveExistingSlugs,
+} from './book-import.service.js';
 import { enrichMangaAttributes } from './ai.service.js';
 import type { DiscoveredFranchise } from './discover.service.js';
 
@@ -105,7 +110,7 @@ export async function importMangaAsFranchise(
         };
     });
 
-    // 3. Tema + franquicia
+    // 3. Tema (fuera del try para capturar `theme.created` en el rollback)
     const theme = await ensureBookTheme(
         title,
         String(franchise.description ?? '').slice(0, 1000),
@@ -113,69 +118,82 @@ export async function importMangaAsFranchise(
         'manga',
     );
 
-    const { data: existing } = await supabaseAdmin
-        .from('franchises')
-        .select('id, name')
-        .eq('theme_id', theme.id)
-        .eq('slug', franchiseSlug)
-        .maybeSingle();
+    try {
+        // 4. ¿Ya existía la franquicia?
+        const { data: existing } = await supabaseAdmin
+            .from('franchises')
+            .select('id, name')
+            .eq('theme_id', theme.id)
+            .eq('slug', franchiseSlug)
+            .maybeSingle();
 
-    if (existing) {
+        if (existing) {
+            return {
+                franchiseId: existing.id,
+                franchiseName: existing.name,
+                themeSlug: theme.slug,
+                charactersImported: 0,
+                warning: `La franquicia "${existing.name}" ya existía.`,
+            };
+        }
+
+        // 5. Crear franquicia
+        const { data: newFranchise, error: fErr } = await supabaseAdmin
+            .from('franchises')
+            .insert({
+                theme_id: theme.id,
+                slug: franchiseSlug,
+                name: title,
+                description: String(franchise.description ?? '').slice(0, 1000) || null,
+                image_url: franchise.imageUrl,
+                source: 'anilist_manga',
+                external_id: franchise.externalId,
+            })
+            .select('id, name')
+            .single();
+
+        if (fErr || !newFranchise) {
+            throw new HttpError(500, `Error creando franquicia: ${fErr?.message ?? 'desconocido'}`);
+        }
+
+        // 6. Personajes (resolviendo colisiones de slug con otras franquicias)
+        const baseSlugs = buildUniqueCharacterSlugs(characters.map((c) => c.name));
+        const slugMap = await resolveExistingSlugs(baseSlugs, newFranchise.id);
+
+        const rows = characters.map((c, idx) => ({
+            franchise_id: newFranchise.id,
+            slug: slugMap.get(baseSlugs[idx]) ?? baseSlugs[idx],
+            name: c.name,
+            image_url: c.image,
+            species: c.species,
+            gender: c.gender,
+            is_human: c.is_human,
+            is_hero: c.is_hero,
+            is_villain: c.is_villain,
+            is_protagonist: c.is_protagonist,
+            has_powers: c.has_powers,
+            uses_weapon: c.uses_weapon,
+            attributes: {},
+        }));
+
+        const { error: cErr } = await supabaseAdmin.from('characters').insert(rows);
+        if (cErr) {
+            await supabaseAdmin.from('franchises').delete().eq('id', newFranchise.id);
+            throw new HttpError(500, `Error insertando personajes: ${cErr.message}`);
+        }
+
         return {
-            franchiseId: existing.id,
-            franchiseName: existing.name,
+            franchiseId: newFranchise.id,
+            franchiseName: newFranchise.name,
             themeSlug: theme.slug,
-            charactersImported: 0,
-            warning: `La franquicia "${existing.name}" ya existía.`,
+            charactersImported: rows.length,
         };
+    } catch (err) {
+        // 🔑 Rollback del tema SOLO si lo acabamos de crear en esta llamada
+        if (theme.created) {
+            console.warn(`[manga-import] ↩️ Rollback tema "${theme.slug}" (id=${theme.id})`);
+            await supabaseAdmin.from('themes').delete().eq('id', theme.id);
+        }
+        throw err;
     }
-
-    const { data: newFranchise, error: fErr } = await supabaseAdmin
-        .from('franchises')
-        .insert({
-            theme_id: theme.id,
-            slug: franchiseSlug,
-            name: title,
-            description: String(franchise.description ?? '').slice(0, 1000) || null,
-            image_url: franchise.imageUrl,
-            source: 'anilist_manga',
-            external_id: franchise.externalId,
-        })
-        .select('id, name')
-        .single();
-
-    if (fErr || !newFranchise) {
-        throw new HttpError(500, `Error creando franquicia: ${fErr?.message ?? 'desconocido'}`);
-    }
-
-    // 4. Insertar personajes
-    const baseSlugs = buildUniqueCharacterSlugs(characters.map((c) => c.name));
-    const rows = characters.map((c, idx) => ({
-        franchise_id: newFranchise.id,
-        slug: baseSlugs[idx],
-        name: c.name,
-        image_url: c.image,
-        species: c.species,
-        gender: c.gender,
-        is_human: c.is_human,
-        is_hero: c.is_hero,
-        is_villain: c.is_villain,
-        is_protagonist: c.is_protagonist,
-        has_powers: c.has_powers,
-        uses_weapon: c.uses_weapon,
-        attributes: {},
-    }));
-
-    const { error: cErr } = await supabaseAdmin.from('characters').insert(rows);
-    if (cErr) {
-        await supabaseAdmin.from('franchises').delete().eq('id', newFranchise.id);
-        throw new HttpError(500, `Error insertando personajes: ${cErr.message}`);
-    }
-
-    return {
-        franchiseId: newFranchise.id,
-        franchiseName: newFranchise.name,
-        themeSlug: theme.slug,
-        charactersImported: rows.length,
-    };
 }

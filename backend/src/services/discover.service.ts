@@ -22,6 +22,8 @@ export interface DiscoveredFranchise {
 // Utilidades
 // -----------------------------------------------------------------------------
 
+const USER_AGENT = 'GuessVerse/1.0 (https://github.com/serpermar/guessVerse)';
+
 async function fetchWithTimeout(
     url: string,
     ms: number,
@@ -36,12 +38,6 @@ async function fetchWithTimeout(
     }
 }
 
-/**
- * Normaliza texto para comparar nombres:
- *  - "Spiderman" y "Spider-Man" → "spiderman"
- *  - "Green Lantern" y "Green-Lantern" → "greenlantern"
- *  - "José" y "Jose" → "jose"
- */
 function normalizeText(s: string): string {
     return s
         .toLowerCase()
@@ -110,7 +106,7 @@ async function searchTmdbTv(query: string): Promise<DiscoveredFranchise[]> {
 }
 
 // -----------------------------------------------------------------------------
-// 2. AniList (Anime)
+// 2. AniList (Anime + Manga)
 // -----------------------------------------------------------------------------
 async function searchAniList(query: string): Promise<DiscoveredFranchise[]> {
     const graphqlQuery = `
@@ -135,7 +131,7 @@ async function searchAniList(query: string): Promise<DiscoveredFranchise[]> {
             externalId: String(m.id),
             name: m.title.english || m.title.romaji,
             description: m.description?.replace(/<[^>]*>?/gm, '') || 'Sin descripción',
-            imageUrl: m.coverImage.large,
+            imageUrl: m.coverImage?.large ?? null,
         })) || [];
     } catch (e) {
         console.error('Error buscando anime:', e);
@@ -143,9 +139,6 @@ async function searchAniList(query: string): Promise<DiscoveredFranchise[]> {
     }
 }
 
-// -----------------------------------------------------------------------------
-// 3. AniList (Manga)
-// -----------------------------------------------------------------------------
 async function searchAniListManga(query: string): Promise<DiscoveredFranchise[]> {
     const graphqlQuery = `
     query ($search: String) {
@@ -189,7 +182,7 @@ async function searchAniListManga(query: string): Promise<DiscoveredFranchise[]>
 }
 
 // -----------------------------------------------------------------------------
-// 4. Jikan (Manga alternativo)
+// 3. Jikan (Manga alternativo)
 // -----------------------------------------------------------------------------
 async function searchJikanManga(query: string): Promise<DiscoveredFranchise[]> {
     if (isOnCooldown('jikan')) return [];
@@ -197,12 +190,7 @@ async function searchJikanManga(query: string): Promise<DiscoveredFranchise[]> {
         const res = await fetchWithTimeout(
             `https://api.jikan.moe/v4/manga?q=${encodeURIComponent(query)}&limit=5&sfw=true`,
             3000,
-            {
-                headers: {
-                    'User-Agent': 'GuessVerse/1.0 (https://github.com/serpermar/guessVerse)',
-                    Accept: 'application/json',
-                },
-            },
+            { headers: { 'User-Agent': USER_AGENT, Accept: 'application/json' } },
         );
         if (!res.ok) {
             if (res.status === 429 || res.status >= 500) markFailed('jikan', `HTTP ${res.status}`);
@@ -231,7 +219,7 @@ async function searchJikanManga(query: string): Promise<DiscoveredFranchise[]> {
 }
 
 // -----------------------------------------------------------------------------
-// 5. IGDB
+// 4. IGDB
 // -----------------------------------------------------------------------------
 let igdbToken: { token: string; expiresAt: number } | null = null;
 
@@ -299,14 +287,14 @@ async function searchIgdbGames(query: string): Promise<DiscoveredFranchise[]> {
 }
 
 // -----------------------------------------------------------------------------
-// 6. Open Library
+// 5. Open Library
 // -----------------------------------------------------------------------------
 async function searchBooks(query: string): Promise<DiscoveredFranchise[]> {
     try {
         const res = await fetchWithTimeout(
             `https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&limit=8&fields=key,title,author_name,first_publish_year,cover_i`,
             5000,
-            { headers: { 'User-Agent': 'GuessVerse/1.0' } },
+            { headers: { 'User-Agent': USER_AGENT } },
         );
         if (!res.ok) return [];
         const data = (await res.json()) as {
@@ -333,44 +321,89 @@ async function searchBooks(query: string): Promise<DiscoveredFranchise[]> {
 }
 
 // -----------------------------------------------------------------------------
-// 7. Superhero API (Cómics)
+// 6. Superhero API (Cómics) — con caché compartida del índice
 // -----------------------------------------------------------------------------
+<<<<<<< HEAD
 interface SuperheroRecord {
+=======
+interface SuperheroApiCharacter {
+>>>>>>> ef159c2 (fix de bug para algunas temáticas)
     id?: number;
     name?: string | null;
     image?: { lg?: string | null; md?: string | null; sm?: string | null } | null;
     biography?: { publisher?: string | null; fullName?: string | null } | null;
 }
 
+<<<<<<< HEAD
 async function searchSuperheroes(query: string): Promise<DiscoveredFranchise[]> {
     // Probamos varias URLs porque cdn.jsdelivr.net puede estar bloqueado en algunas redes.
+=======
+const SUPERHERO_INDEX_TTL_MS = 30 * 60_000; // 30 min
+let superheroIndexCache: { data: SuperheroApiCharacter[]; at: number } | null = null;
+let superheroIndexPromise: Promise<SuperheroApiCharacter[]> | null = null;
+
+async function fetchSuperheroIndex(): Promise<SuperheroApiCharacter[]> {
+>>>>>>> ef159c2 (fix de bug para algunas temáticas)
     const urls = [
         'https://cdn.jsdelivr.net/gh/akabab/superhero-api@0.3.0/api/all.json',
         'https://raw.githubusercontent.com/akabab/superhero-api/master/api/all.json',
         'https://akabab.github.io/superhero-api/api/all.json',
     ];
 
+<<<<<<< HEAD
     let all: SuperheroRecord[] | null = null;
 
+=======
+>>>>>>> ef159c2 (fix de bug para algunas temáticas)
     for (const url of urls) {
         try {
-            const res = await fetchWithTimeout(url, 8000);
+            const res = await fetchWithTimeout(url, 8000, {
+                headers: { 'User-Agent': USER_AGENT },
+            });
             if (!res.ok) {
                 console.warn(`[superhero] ${url.split('/')[2]} → HTTP ${res.status}`);
                 continue;
             }
+<<<<<<< HEAD
             all = (await res.json()) as SuperheroRecord[];
             console.log(`[superhero] ✅ cargado desde ${url.split('/')[2]} (${all?.length ?? 0} personajes)`);
             break;
+=======
+            const json = (await res.json()) as SuperheroApiCharacter[];
+            console.log(`[superhero] ✅ cargado desde ${url.split('/')[2]} (${json.length} personajes)`);
+            return json;
+>>>>>>> ef159c2 (fix de bug para algunas temáticas)
         } catch (e) {
             console.warn(`[superhero] ${url.split('/')[2]} → ${(e as Error).message}`);
         }
     }
+    console.error('[superhero] ❌ Ninguna URL respondió.');
+    return [];
+}
 
-    if (!all || all.length === 0) {
-        console.error('[superhero] ❌ Ninguna URL respondió. Revisa red o proxy.');
-        return [];
+async function loadSuperheroIndex(): Promise<SuperheroApiCharacter[]> {
+    if (superheroIndexCache && Date.now() - superheroIndexCache.at < SUPERHERO_INDEX_TTL_MS) {
+        return superheroIndexCache.data;
     }
+    // Coalesce peticiones concurrentes
+    if (superheroIndexPromise) return superheroIndexPromise;
+
+    superheroIndexPromise = (async () => {
+        try {
+            const data = await fetchSuperheroIndex();
+            superheroIndexCache = { data, at: Date.now() };
+            return data;
+        } finally {
+            superheroIndexPromise = null;
+        }
+    })();
+
+    return superheroIndexPromise;
+}
+
+async function searchSuperheroes(query: string): Promise<DiscoveredFranchise[]> {
+    const all = await loadSuperheroIndex();
+    if (all.length === 0) return [];
 
     const q = normalizeText(query);
     if (!q) return [];
@@ -406,38 +439,19 @@ export async function discoverFranchises(query: string): Promise<DiscoveredFranc
         return cached.data;
     }
 
-    const [
-        superheroes,
-        animes,
-        mangasAniList,
-        mangasJikan,
-        movies,
-        tvs,
-        games,
-        books,
-    ] = await Promise.allSettled([
-        searchSuperheroes(query),
-        searchAniList(query),
-        searchAniListManga(query),
-        searchJikanManga(query),
-        searchTmdbMovies(query),
-        searchTmdbTv(query),
-        searchIgdbGames(query),
-        searchBooks(query),
-    ]);
+    const [superheroes, animes, mangasAniList, mangasJikan, movies, tvs, games, books] =
+        await Promise.allSettled([
+            searchSuperheroes(query),
+            searchAniList(query),
+            searchAniListManga(query),
+            searchJikanManga(query),
+            searchTmdbMovies(query),
+            searchTmdbTv(query),
+            searchIgdbGames(query),
+            searchBooks(query),
+        ]);
 
-    // 👇 ORDEN: los personajes (con imagen de retrato) primero.
-    // Luego franquicias de anime/manga/pelis/series/juegos/libros.
-    const ordered = [
-        superheroes,
-        animes,
-        mangasAniList,
-        mangasJikan,
-        movies,
-        tvs,
-        games,
-        books,
-    ];
+    const ordered = [superheroes, animes, mangasAniList, mangasJikan, movies, tvs, games, books];
 
     const flatten: DiscoveredFranchise[] = [];
     for (const r of ordered) {

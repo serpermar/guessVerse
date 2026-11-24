@@ -55,7 +55,10 @@ export function buildUniqueCharacterSlugs(names: string[]): string[] {
     });
 }
 
-async function resolveExistingSlugs(slugs: string[], franchiseId: string): Promise<Map<string, string>> {
+export async function resolveExistingSlugs(
+    slugs: string[],
+    franchiseId: string,
+): Promise<Map<string, string>> {
     const { data: existing, error } = await supabaseAdmin
         .from('characters')
         .select('slug')
@@ -64,7 +67,7 @@ async function resolveExistingSlugs(slugs: string[], franchiseId: string): Promi
     if (error || !existing) return new Map();
 
     const taken = new Set(existing.map((r: { slug: string }) => r.slug));
-    const suffix = franchiseId.slice(0, 6);
+    const suffix = franchiseId.replace(/-/g, '').slice(0, 8);
     const map = new Map<string, string>();
     for (const s of slugs) {
         map.set(s, taken.has(s) ? `${s}-${suffix}` : s);
@@ -81,13 +84,32 @@ function logSupabaseError(label: string, error: any) {
     console.error('  hint:    ', error.hint);
 }
 
+// Códigos Postgres que indican incompatibilidad de esquema (columna/enum/constraint).
+const SCHEMA_ERROR_CODES = new Set([
+    '23514', // check_violation
+    '42703', // undefined_column
+    '42P01', // undefined_table
+    '22P02', // invalid_text_representation (enum inválido)
+    '42804', // datatype_mismatch
+]);
+
+function isSchemaError(error: { code?: string; message?: string } | null): boolean {
+    if (!error) return false;
+    if (error.code && SCHEMA_ERROR_CODES.has(error.code)) return true;
+    return /type|check|constraint|column/i.test(error.message ?? '');
+}
+
 // 🔑 EXPORTADO — lo usa manga-import y jikan-import
 export async function ensureBookTheme(
     title: string,
     description: string,
     imageUrl: string | null,
+<<<<<<< HEAD
     type: 'book' | 'manga' | 'comics' = 'book',
 ): Promise<{ id: string; slug: string; name: string }> {
+=======
+): Promise<{ id: string; slug: string; name: string; created: boolean }> {
+>>>>>>> ef159c2 (fix de bug para algunas temáticas)
     const slug = slugify(title);
     console.log(`[book-import] ensureBookTheme → slug="${slug}" type="${type}"`);
 
@@ -100,6 +122,7 @@ export async function ensureBookTheme(
     if (findErr) logSupabaseError('Error buscando tema existente', findErr);
     if (existing) {
         console.log('[book-import] ✅ Tema ya existía:', existing);
+<<<<<<< HEAD
         // Los temas importados antes de distinguir manga/cómic quedaron como
         // "book"; si ahora conocemos su tipo real, lo corregimos para que la
         // ambientación y el catálogo lo traten bien.
@@ -113,6 +136,9 @@ export async function ensureBookTheme(
             }
         }
         return existing;
+=======
+        return { ...existing, created: false };
+>>>>>>> ef159c2 (fix de bug para algunas temáticas)
     }
 
     let { data: created, error } = await supabaseAdmin
@@ -128,8 +154,8 @@ export async function ensureBookTheme(
         .select('id, slug, name')
         .single();
 
-    if (error && /type|check|constraint|column/i.test(error.message)) {
-        console.warn('[book-import] Fallback sin type. Causa:', error.message);
+    if (isSchemaError(error)) {
+        console.warn('[book-import] Fallback sin type. Causa:', error!.message, `(code=${error!.code})`);
         const retry = await supabaseAdmin
             .from('themes')
             .insert({
@@ -151,7 +177,7 @@ export async function ensureBookTheme(
     }
 
     console.log('[book-import] ✅ Tema creado:', created);
-    return created;
+    return { ...created, created: true };
 }
 
 export interface BookImportResult {
@@ -162,15 +188,12 @@ export interface BookImportResult {
     warning?: string;
 }
 
-// Cache de la lista completa de Superhero API para no descargarla en cada import
-let superheroCache: Array<{
-    name: string;
-    imageUrl: string | null;
-}> | null = null;
+// Cache del índice de Superhero API (con TTL para no servir datos obsoletos indefinidamente)
+const SUPERHERO_INDEX_TTL_MS = 30 * 60_000;
+let superheroCache: { data: Array<{ name: string; imageUrl: string | null }>; at: number } | null = null;
+let superheroPromise: Promise<Array<{ name: string; imageUrl: string | null }>> | null = null;
 
-async function loadSuperheroIndex(): Promise<Array<{ name: string; imageUrl: string | null }>> {
-    if (superheroCache) return superheroCache;
-
+async function fetchSuperheroIndex(): Promise<Array<{ name: string; imageUrl: string | null }>> {
     const urls = [
         'https://cdn.jsdelivr.net/gh/akabab/superhero-api@0.3.0/api/all.json',
         'https://raw.githubusercontent.com/akabab/superhero-api/master/api/all.json',
@@ -181,41 +204,62 @@ async function loadSuperheroIndex(): Promise<Array<{ name: string; imageUrl: str
         try {
             const controller = new AbortController();
             const timer = setTimeout(() => controller.abort(), 8000);
-            const res = await fetch(url, { signal: controller.signal }).finally(() => clearTimeout(timer));
+            const res = await fetch(url, {
+                signal: controller.signal,
+                headers: { 'User-Agent': USER_AGENT },
+            }).finally(() => clearTimeout(timer));
             if (!res.ok) continue;
             const all = (await res.json()) as Array<{
                 name?: string | null;
                 image?: { lg?: string | null; md?: string | null; sm?: string | null } | null;
             }>;
-            superheroCache = all
+            const index = all
                 .filter((c) => c.name && (c.image?.lg || c.image?.md || c.image?.sm))
                 .map((c) => ({
                     name: c.name as string,
                     imageUrl: c.image?.lg ?? c.image?.md ?? c.image?.sm ?? null,
                 }));
-            console.log(`[book-import] Superhero index cargado: ${superheroCache.length} personajes`);
-            return superheroCache;
+            console.log(`[book-import] Superhero index cargado: ${index.length} personajes`);
+            return index;
         } catch (e) {
             console.warn(`[book-import] Superhero ${url.split('/')[2]} falló:`, (e as Error).message);
         }
     }
-
-    superheroCache = [];
     return [];
+}
+
+async function loadSuperheroIndex(): Promise<Array<{ name: string; imageUrl: string | null }>> {
+    if (superheroCache && Date.now() - superheroCache.at < SUPERHERO_INDEX_TTL_MS) {
+        return superheroCache.data;
+    }
+    if (superheroPromise) return superheroPromise;
+
+    superheroPromise = (async () => {
+        try {
+            const data = await fetchSuperheroIndex();
+            superheroCache = { data, at: Date.now() };
+            return data;
+        } finally {
+            superheroPromise = null;
+        }
+    })();
+    return superheroPromise;
 }
 
 /**
  * Busca el nombre del personaje en el índice de Superhero API.
  * Normaliza "Spiderman" → "spiderman" para matchear "Spider-Man".
  */
-function findSuperheroImage(name: string, index: Array<{ name: string; imageUrl: string | null }>): string | null {
+function findSuperheroImage(
+    name: string,
+    index: Array<{ name: string; imageUrl: string | null }>,
+): string | null {
     if (index.length === 0) return null;
     const norm = (s: string) =>
         s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[-_\s.]+/g, '').trim();
     const target = norm(name);
     const exact = index.find((c) => norm(c.name) === target);
-    if (exact) return exact.imageUrl;
-    return null;
+    return exact?.imageUrl ?? null;
 }
 
 export async function importBookAsFranchise(
@@ -227,7 +271,7 @@ export async function importBookAsFranchise(
 
     const franchiseSlug = slugify(title);
 
-    // PASO 1
+    // PASO 1 — Detalles
     const details = await fetchWorkDetails(franchise.externalId);
     const fullDescription =
         (typeof details?.description === 'string' && details.description) ||
@@ -235,7 +279,7 @@ export async function importBookAsFranchise(
         franchise.description ||
         '';
 
-    // PASO 2
+    // PASO 2 — Extracción IA
     const bookInfo: BookInfo = {
         title,
         authors: [],
@@ -252,92 +296,103 @@ export async function importBookAsFranchise(
         );
     }
 
-    // 🖼️ Enriquecer con imágenes de Superhero API si hay match
+    // 🖼️ Enriquecer con imágenes de Superhero API si hay match (sin mutar el original)
     const superheroIndex = await loadSuperheroIndex();
-    let withImages = 0;
-    for (const c of extracted) {
-        const img = findSuperheroImage(c.name, superheroIndex);
-        if (img) {
-            (c as any).imageUrl = img;
-            withImages++;
-        }
-    }
-    console.log(`[book-import] 🖼️ ${withImages}/${extracted.length} personajes con imagen de Superhero API`);
-
-    // PASO 3
-    const theme = await ensureBookTheme(title, String(fullDescription).slice(0, 1000), franchise.imageUrl);
-
-    // PASO 4
-    const { data: existingFranchise } = await supabaseAdmin
-        .from('franchises')
-        .select('id, name')
-        .eq('theme_id', theme.id)
-        .eq('slug', franchiseSlug)
-        .maybeSingle();
-
-    if (existingFranchise) {
-        return {
-            franchiseId: existingFranchise.id,
-            franchiseName: existingFranchise.name,
-            themeSlug: theme.slug,
-            charactersImported: 0,
-            warning: `La franquicia "${existingFranchise.name}" ya existía.`,
-        };
-    }
-
-    // PASO 5
-    const { data: newFranchise, error: franchiseErr } = await supabaseAdmin
-        .from('franchises')
-        .insert({
-            theme_id: theme.id,
-            slug: franchiseSlug,
-            name: title,
-            description: String(fullDescription).slice(0, 1000) || null,
-            image_url: franchise.imageUrl,
-            source: 'openlibrary',
-            external_id: normalizeExternalId(franchise.externalId),
-        })
-        .select('id, name')
-        .single();
-
-    if (franchiseErr || !newFranchise) {
-        logSupabaseError('Error creando franquicia', franchiseErr);
-        throw new HttpError(500, `No se pudo crear la franquicia: ${franchiseErr?.message ?? 'error desconocido'}`);
-    }
-
-    // PASO 6
-    const baseSlugs = buildUniqueCharacterSlugs(extracted.map((c) => c.name));
-    const slugMap = await resolveExistingSlugs(baseSlugs, newFranchise.id);
-
-    const rows = extracted.map((c, idx) => ({
-        franchise_id: newFranchise.id,
-        slug: slugMap.get(baseSlugs[idx]) ?? baseSlugs[idx],
-        name: c.name.trim(),
-        image_url: (c as any).imageUrl ?? null,
-        species: c.species ?? null,
-        gender: c.gender ?? null,
-        is_human: c.is_human ?? null,
-        is_hero: c.is_hero ?? null,
-        is_villain: c.is_villain ?? null,
-        is_protagonist: c.is_protagonist ?? null,
-        has_powers: c.has_powers ?? null,
-        uses_weapon: c.uses_weapon ?? null,
-        attributes: c.extraAttributes ?? {},
+    const extractedWithImages = extracted.map((c) => ({
+        ...c,
+        imageUrl: findSuperheroImage(c.name, superheroIndex),
     }));
+    const withImages = extractedWithImages.filter((c) => c.imageUrl).length;
+    console.log(`[book-import] 🖼️ ${withImages}/${extractedWithImages.length} personajes con imagen de Superhero API`);
 
-    const { error: charsErr } = await supabaseAdmin.from('characters').insert(rows);
+    // PASO 3 — Tema
+    const theme = await ensureBookTheme(
+        title,
+        String(fullDescription).slice(0, 1000),
+        franchise.imageUrl,
+    );
 
-    if (charsErr) {
-        logSupabaseError('Error insertando personajes', charsErr);
-        await supabaseAdmin.from('franchises').delete().eq('id', newFranchise.id);
-        throw new HttpError(500, `No se pudieron insertar los personajes: ${charsErr.message}`);
+    try {
+        // PASO 4 — ¿Existe ya la franquicia?
+        const { data: existingFranchise } = await supabaseAdmin
+            .from('franchises')
+            .select('id, name')
+            .eq('theme_id', theme.id)
+            .eq('slug', franchiseSlug)
+            .maybeSingle();
+
+        if (existingFranchise) {
+            return {
+                franchiseId: existingFranchise.id,
+                franchiseName: existingFranchise.name,
+                themeSlug: theme.slug,
+                charactersImported: 0,
+                warning: `La franquicia "${existingFranchise.name}" ya existía.`,
+            };
+        }
+
+        // PASO 5 — Crear franquicia
+        const { data: newFranchise, error: franchiseErr } = await supabaseAdmin
+            .from('franchises')
+            .insert({
+                theme_id: theme.id,
+                slug: franchiseSlug,
+                name: title,
+                description: String(fullDescription).slice(0, 1000) || null,
+                image_url: franchise.imageUrl,
+                source: 'openlibrary',
+                external_id: normalizeExternalId(franchise.externalId),
+            })
+            .select('id, name')
+            .single();
+
+        if (franchiseErr || !newFranchise) {
+            logSupabaseError('Error creando franquicia', franchiseErr);
+            throw new HttpError(500, `No se pudo crear la franquicia: ${franchiseErr?.message ?? 'error desconocido'}`);
+        }
+
+        // PASO 6 — Personajes
+        const baseSlugs = buildUniqueCharacterSlugs(extractedWithImages.map((c) => c.name));
+        const slugMap = await resolveExistingSlugs(baseSlugs, newFranchise.id);
+
+        const rows = extractedWithImages.map((c, idx) => ({
+            franchise_id: newFranchise.id,
+            slug: slugMap.get(baseSlugs[idx]) ?? baseSlugs[idx],
+            name: c.name.trim(),
+            image_url: c.imageUrl ?? null,
+            species: c.species ?? null,
+            gender: c.gender ?? null,
+            is_human: c.is_human ?? null,
+            is_hero: c.is_hero ?? null,
+            is_villain: c.is_villain ?? null,
+            is_protagonist: c.is_protagonist ?? null,
+            has_powers: c.has_powers ?? null,
+            uses_weapon: c.uses_weapon ?? null,
+            attributes: c.extraAttributes ?? {},
+        }));
+
+        const { error: charsErr } = await supabaseAdmin.from('characters').insert(rows);
+
+        if (charsErr) {
+            logSupabaseError('Error insertando personajes', charsErr);
+            // Rollback de la franquicia recién creada
+            await supabaseAdmin.from('franchises').delete().eq('id', newFranchise.id);
+            throw new HttpError(500, `No se pudieron insertar los personajes: ${charsErr.message}`);
+        }
+
+        console.log(`[book-import] ✅ ${rows.length} personajes insertados`);
+        return {
+            franchiseId: newFranchise.id,
+            franchiseName: newFranchise.name,
+            themeSlug: theme.slug,
+            charactersImported: extractedWithImages.length,
+        };
+    } catch (err) {
+        // Rollback del tema si lo acabamos de crear en esta llamada
+        if (theme.created) {
+            console.warn(`[book-import] ↩️ Rollback tema "${theme.slug}" (id=${theme.id})`);
+            await supabaseAdmin.from('themes').delete().eq('id', theme.id);
+        }
+        throw err;
     }
-
-    console.log(`[book-import] ✅ ${rows.length} personajes insertados`);
-    return {
-        franchiseId: newFranchise.id,
-        franchiseName: newFranchise.name,
-        themeSlug: theme.slug,
-        charactersImported: extracted.length,
-    };
 }
