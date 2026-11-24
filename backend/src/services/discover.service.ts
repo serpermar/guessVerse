@@ -18,10 +18,6 @@ export interface DiscoveredFranchise {
     imageUrl: string | null;
 }
 
-// -----------------------------------------------------------------------------
-// Utilidades
-// -----------------------------------------------------------------------------
-
 const USER_AGENT = 'GuessVerse/1.0 (https://github.com/serpermar/guessVerse)';
 
 async function fetchWithTimeout(
@@ -321,40 +317,26 @@ async function searchBooks(query: string): Promise<DiscoveredFranchise[]> {
 }
 
 // -----------------------------------------------------------------------------
-// 6. Superhero API (Cómics) — con caché compartida del índice
+// 6. Superhero API (Cómics) — con caché compartida
 // -----------------------------------------------------------------------------
-<<<<<<< HEAD
-interface SuperheroRecord {
-=======
 interface SuperheroApiCharacter {
->>>>>>> ef159c2 (fix de bug para algunas temáticas)
     id?: number;
     name?: string | null;
     image?: { lg?: string | null; md?: string | null; sm?: string | null } | null;
     biography?: { publisher?: string | null; fullName?: string | null } | null;
 }
 
-<<<<<<< HEAD
-async function searchSuperheroes(query: string): Promise<DiscoveredFranchise[]> {
-    // Probamos varias URLs porque cdn.jsdelivr.net puede estar bloqueado en algunas redes.
-=======
-const SUPERHERO_INDEX_TTL_MS = 30 * 60_000; // 30 min
+const SUPERHERO_INDEX_TTL_MS = 30 * 60_000;
 let superheroIndexCache: { data: SuperheroApiCharacter[]; at: number } | null = null;
 let superheroIndexPromise: Promise<SuperheroApiCharacter[]> | null = null;
 
 async function fetchSuperheroIndex(): Promise<SuperheroApiCharacter[]> {
->>>>>>> ef159c2 (fix de bug para algunas temáticas)
     const urls = [
         'https://cdn.jsdelivr.net/gh/akabab/superhero-api@0.3.0/api/all.json',
         'https://raw.githubusercontent.com/akabab/superhero-api/master/api/all.json',
         'https://akabab.github.io/superhero-api/api/all.json',
     ];
 
-<<<<<<< HEAD
-    let all: SuperheroRecord[] | null = null;
-
-=======
->>>>>>> ef159c2 (fix de bug para algunas temáticas)
     for (const url of urls) {
         try {
             const res = await fetchWithTimeout(url, 8000, {
@@ -364,15 +346,9 @@ async function fetchSuperheroIndex(): Promise<SuperheroApiCharacter[]> {
                 console.warn(`[superhero] ${url.split('/')[2]} → HTTP ${res.status}`);
                 continue;
             }
-<<<<<<< HEAD
-            all = (await res.json()) as SuperheroRecord[];
-            console.log(`[superhero] ✅ cargado desde ${url.split('/')[2]} (${all?.length ?? 0} personajes)`);
-            break;
-=======
             const json = (await res.json()) as SuperheroApiCharacter[];
             console.log(`[superhero] ✅ cargado desde ${url.split('/')[2]} (${json.length} personajes)`);
             return json;
->>>>>>> ef159c2 (fix de bug para algunas temáticas)
         } catch (e) {
             console.warn(`[superhero] ${url.split('/')[2]} → ${(e as Error).message}`);
         }
@@ -385,7 +361,6 @@ async function loadSuperheroIndex(): Promise<SuperheroApiCharacter[]> {
     if (superheroIndexCache && Date.now() - superheroIndexCache.at < SUPERHERO_INDEX_TTL_MS) {
         return superheroIndexCache.data;
     }
-    // Coalesce peticiones concurrentes
     if (superheroIndexPromise) return superheroIndexPromise;
 
     superheroIndexPromise = (async () => {

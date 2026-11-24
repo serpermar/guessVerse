@@ -79,7 +79,6 @@ export async function importMangaAsFranchise(
 
     const franchiseSlug = slugify(title);
 
-    // 1. Personajes desde AniList (con imagen)
     const rawCharacters = await fetchAniListMangaCharacters(franchise.externalId);
     console.log(`[manga-import] AniList devolvió ${rawCharacters.length} personajes para "${title}"`);
 
@@ -90,7 +89,6 @@ export async function importMangaAsFranchise(
         );
     }
 
-    // 2. Enriquecer atributos con IA (species, gender, is_hero…)
     const attrs = await enrichMangaAttributes(title, rawCharacters.map((c) => c.name));
     const attrsByName = new Map(attrs.map((a) => [a.name, a]));
 
@@ -110,16 +108,13 @@ export async function importMangaAsFranchise(
         };
     });
 
-    // 3. Tema (fuera del try para capturar `theme.created` en el rollback)
     const theme = await ensureBookTheme(
         title,
         String(franchise.description ?? '').slice(0, 1000),
         franchise.imageUrl,
-        'manga',
     );
 
     try {
-        // 4. ¿Ya existía la franquicia?
         const { data: existing } = await supabaseAdmin
             .from('franchises')
             .select('id, name')
@@ -137,7 +132,6 @@ export async function importMangaAsFranchise(
             };
         }
 
-        // 5. Crear franquicia
         const { data: newFranchise, error: fErr } = await supabaseAdmin
             .from('franchises')
             .insert({
@@ -156,7 +150,6 @@ export async function importMangaAsFranchise(
             throw new HttpError(500, `Error creando franquicia: ${fErr?.message ?? 'desconocido'}`);
         }
 
-        // 6. Personajes (resolviendo colisiones de slug con otras franquicias)
         const baseSlugs = buildUniqueCharacterSlugs(characters.map((c) => c.name));
         const slugMap = await resolveExistingSlugs(baseSlugs, newFranchise.id);
 
@@ -189,7 +182,6 @@ export async function importMangaAsFranchise(
             charactersImported: rows.length,
         };
     } catch (err) {
-        // 🔑 Rollback del tema SOLO si lo acabamos de crear en esta llamada
         if (theme.created) {
             console.warn(`[manga-import] ↩️ Rollback tema "${theme.slug}" (id=${theme.id})`);
             await supabaseAdmin.from('themes').delete().eq('id', theme.id);

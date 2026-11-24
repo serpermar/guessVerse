@@ -75,7 +75,6 @@ export async function importJikanAsFranchise(
 
     const franchiseSlug = slugify(title);
 
-    // 1. Personajes + imágenes
     const rawCharacters = await fetchJikanCharacters(franchise.externalId);
     console.log(`[jikan-import] ${rawCharacters.length} personajes para "${title}"`);
 
@@ -86,7 +85,6 @@ export async function importJikanAsFranchise(
         );
     }
 
-    // 2. Atributos IA
     const attrs = await enrichMangaAttributes(title, rawCharacters.map((c) => c.name));
     const attrsByName = new Map(attrs.map((a) => [a.name, a]));
 
@@ -106,24 +104,13 @@ export async function importJikanAsFranchise(
         };
     });
 
-<<<<<<< HEAD
-    // 3. Tema + franquicia
-    const theme = await ensureBookTheme(
-        title,
-        String(franchise.description ?? ''),
-        franchise.imageUrl,
-        'manga',
-=======
-    // 3. Tema
     const theme = await ensureBookTheme(
         title,
         String(franchise.description ?? '').slice(0, 1000),
         franchise.imageUrl,
->>>>>>> ef159c2 (fix de bug para algunas temáticas)
     );
 
     try {
-        // 4. ¿Ya existía?
         const { data: existing } = await supabaseAdmin
             .from('franchises')
             .select('id, name')
@@ -141,7 +128,6 @@ export async function importJikanAsFranchise(
             };
         }
 
-        // 5. Crear franquicia
         const { data: newFranchise, error: fErr } = await supabaseAdmin
             .from('franchises')
             .insert({
@@ -160,7 +146,6 @@ export async function importJikanAsFranchise(
             throw new HttpError(500, `Error creando franquicia: ${fErr?.message ?? 'desconocido'}`);
         }
 
-        // 6. Personajes (resolviendo colisiones de slug)
         const baseSlugs = buildUniqueCharacterSlugs(characters.map((c) => c.name));
         const slugMap = await resolveExistingSlugs(baseSlugs, newFranchise.id);
 
@@ -193,7 +178,6 @@ export async function importJikanAsFranchise(
             charactersImported: rows.length,
         };
     } catch (err) {
-        // 🔑 Rollback del tema SOLO si lo acabamos de crear
         if (theme.created) {
             console.warn(`[jikan-import] ↩️ Rollback tema "${theme.slug}" (id=${theme.id})`);
             await supabaseAdmin.from('themes').delete().eq('id', theme.id);
